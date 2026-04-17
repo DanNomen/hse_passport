@@ -617,7 +617,7 @@ function App() {
               <div className="glass-panel animate-slide-up" style={{ maxWidth: '900px', margin: '0 auto', padding: '3rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '3rem' }}>
                   <button className="btn-icon" onClick={() => setEmployeeView('list')}>←</button>
-                  <h2>{employeeView === 'add' ? "Recrutement" : "Mise à jour Dossier"}</h2>
+                  <h2>{employeeView === 'add' ? "Creation employé" : "Mise à jour Dossier"}</h2>
                 </div>
 
                 <form onSubmit={saveEmployee} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
