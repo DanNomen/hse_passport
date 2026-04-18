@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import { jsPDF } from 'jspdf'
 import html2canvas from 'html2canvas'
+import { Capacitor } from '@capacitor/core'
+import { Filesystem, Directory } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 import avatarPlaceholder from './assets/avatar.png'
 import logo from './assets/logo.png'
 import mgpBg from './assets/mgp_background.jpg'
@@ -48,17 +51,18 @@ const getStatusLabel = (comp) => {
 }
 
 function App() {
-  const isProd = import.meta.env.MODE === 'production'
-  const API_URL = 'http://46.105.75.234:3009/api'
-  const DB_PREFIX = import.meta.env.MODE === 'development' ? '_dev' : ''
+  const isProd = true 
+  const API_URL = 'http://46.105.75.234:3009/api'.trim()
+  const DB_PREFIX = '_prod' // Stable prefix for mobile production
 
   // --- States ---
-  const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem(`hse_auth${DB_PREFIX}`) === 'true')
-  const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem(`hse_user${DB_PREFIX}`)
-    return saved ? JSON.parse(saved) : null
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [currentUser, setCurrentUser] = useState(null)
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('hse_theme');
+    if (saved) return saved;
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
   })
-  const [theme, setTheme] = useState(() => localStorage.getItem('hse_theme') || 'dark')
 
   const [accounts, setAccounts] = useState(() => {
     const saved = localStorage.getItem(`hse_accounts_v1${DB_PREFIX}`)
@@ -69,8 +73,12 @@ function App() {
     const saved = localStorage.getItem(`hse_employees_v2${DB_PREFIX}`)
     return saved ? JSON.parse(saved) : INITIAL_EMPLOYEES
   })
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
 
   const [employeeView, setEmployeeView] = useState('list')
+  const [showHeader, setShowHeader] = useState(true)
+  const [lastScrollY, setLastScrollY] = useState(0)
   const [selectedEmployee, setSelectedEmployee] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterDept, setFilterDept] = useState('Tous')
@@ -85,32 +93,42 @@ function App() {
   // Modal State
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, item: null, type: '' })
 
-  // --- Effects ---
+  // Chargement initial des données depuis le serveur en mode Prod
   useEffect(() => {
-    if (isProd && isAuthenticated) {
-      fetch(`${API_URL}/accounts`)
-        .then(res => res.json())
-        .then(data => data.success && setAccounts(data.accounts))
-        .catch(err => console.error("API error:", err))
+    const fetchInitialData = async () => {
+      if (isProd && isAuthenticated) {
+        try {
+          const { CapacitorHttp } = await import('@capacitor/core')
+          
+          // Récupérer les comptes
+          const resAcc = await CapacitorHttp.get({ 
+            url: `${API_URL}/accounts`,
+            connectTimeout: 30000,
+            readTimeout: 30000
+          })
+          if (resAcc.status === 200 && resAcc.data.success) {
+            setAccounts(resAcc.data.accounts)
+            localStorage.setItem(`hse_accounts_v1${DB_PREFIX}`, JSON.stringify(resAcc.data.accounts))
+          }
 
-      fetch(`${API_URL}/employees`)
-        .then(res => res.json())
-        .then(data => data.success && setEmployees(data.employees))
-        .catch(err => console.error("API error:", err))
+          // Récupérer les employés
+          const resEmp = await CapacitorHttp.get({ 
+            url: `${API_URL}/employees`,
+            connectTimeout: 30000,
+            readTimeout: 30000
+          })
+          if (resEmp.status === 200 && resEmp.data.success) {
+            setEmployees(resEmp.data.employees)
+            localStorage.setItem(`hse_employees_v2${DB_PREFIX}`, JSON.stringify(resEmp.data.employees))
+          }
+        } catch (err) {
+          console.error("Erreur chargement initial:", err)
+        }
+      }
     }
+    fetchInitialData()
   }, [isProd, isAuthenticated])
 
-  useEffect(() => {
-    localStorage.setItem(`hse_auth${DB_PREFIX}`, isAuthenticated)
-  }, [isAuthenticated, DB_PREFIX])
-
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem(`hse_user${DB_PREFIX}`, JSON.stringify(currentUser))
-    } else {
-      localStorage.removeItem(`hse_user${DB_PREFIX}`)
-    }
-  }, [currentUser, DB_PREFIX])
 
   useEffect(() => {
     if (!isProd) {
@@ -124,6 +142,18 @@ function App() {
     localStorage.setItem('hse_theme', theme)
   }, [theme])
 
+  // Notification de l'état de la connexion Internet
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
   useEffect(() => {
     if (draftCert.dateObtention && draftCert.validite) {
       const date = new Date(draftCert.dateObtention)
@@ -131,45 +161,220 @@ function App() {
       setDraftCert(prev => ({ ...prev, dateExpiration: date.toISOString().split('T')[0] }))
     }
   }, [draftCert.dateObtention, draftCert.validite])
+  
+  // Smart Header Logic
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY
+      if (currentScrollY > lastScrollY && currentScrollY > 60) {
+        setShowHeader(false) // On descend -> cache le menu
+      } else {
+        setShowHeader(true) // On monte -> affiche le menu
+      }
+      setLastScrollY(currentScrollY)
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [lastScrollY])
 
   // --- Handlers ---
+  useEffect(() => {
+    localStorage.setItem('hse_employees', JSON.stringify(employees))
+  }, [employees])
+
+  useEffect(() => {
+    const handleStatusChange = () => setIsOnline(navigator.onLine)
+    window.addEventListener('online', handleStatusChange)
+    window.addEventListener('offline', handleStatusChange)
+    return () => {
+      window.removeEventListener('online', handleStatusChange)
+      window.removeEventListener('offline', handleStatusChange)
+    }
+  }, [])
+
+  const syncData = async () => {
+    if (!isOnline) {
+      showToast("Pas de connexion internet", "error")
+      return
+    }
+
+    setIsSyncing(true)
+    try {
+      const { CapacitorHttp } = await import('@capacitor/core')
+
+      // 1. PULL (Récupérer l'état actuel du serveur)
+      const optionsPull = {
+        url: `${API_URL}/employees`,
+        headers: { 'Content-Type': 'application/json' }
+      }
+      const resPull = await CapacitorHttp.get(optionsPull)
+      if (resPull.status !== 200) throw new Error("Erreur de connexion au serveur")
+      
+      const serverEmployees = resPull.data.employees || []
+      
+      // 2. DELETE (Supprimer du serveur ceux qui ne sont plus sur mobile)
+      // On considère ici que le mobile est le "Maitre" pour les suppressions effectuées localement
+      for (const sEmp of serverEmployees) {
+        const existsLocally = employees.some(e => e.matricule === sEmp.matricule)
+        if (!existsLocally) {
+          await CapacitorHttp.delete({
+            url: `${API_URL}/employees/${sEmp.matricule}`
+          })
+          console.log(`Supprimé du serveur : ${sEmp.matricule}`)
+        }
+      }
+
+      // 3. PUSH (Envoyer/Mettre à jour les locaux vers le serveur)
+      for (const employee of employees) {
+        try {
+          const optionsPush = {
+            url: `${API_URL}/employees`,
+            headers: { 'Content-Type': 'application/json' },
+            data: employee
+          }
+          const resPush = await CapacitorHttp.post(optionsPush)
+          if (resPush.status !== 200 && resPush.status !== 201) {
+            console.warn(`Échec de l'envoi pour ${employee.matricule}`)
+          }
+        } catch (pushErr) {
+          console.error(`Erreur push ${employee.matricule}:`, pushErr)
+        }
+      }
+
+      showToast("Synchronisation et mise à jour terminées !")
+    } catch (err) {
+      console.error(err)
+      showToast("Erreur de synchronisation : vous n'êtes pas connecté à internet", "danger")
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
   const showToast = (message, type = 'success') => {
     const id = Date.now()
     setToasts(prev => [...prev, { id, message, type }])
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000)
   }
 
+  const [isBiometryAvailable, setIsBiometryAvailable] = useState(false)
+
+  // Vérifier la disponibilité de la biométrie
+  useEffect(() => {
+    const checkBiometry = async () => {
+      try {
+        const { NativeBiometric } = await import('@capgo/capacitor-native-biometric')
+        const result = await NativeBiometric.isAvailable()
+        setIsBiometryAvailable(result.isAvailable)
+      } catch (err) {
+        console.warn("Biométrie non supportée sur cet appareil")
+      }
+    }
+    checkBiometry()
+  }, [])
+
+  const handleBiometricLogin = async () => {
+    try {
+      const { NativeBiometric } = await import('@capgo/capacitor-native-biometric')
+      
+      // FORCER l'affichage de la fenêtre d'empreinte
+      await NativeBiometric.verifyIdentity({
+        reason: "Accès sécurisé à HSE Passport",
+        title: "Vérification par empreinte",
+        subtitle: "Posez votre doigt pour continuer",
+        description: "Cette étape est requise pour votre sécurité.",
+        negativeButtonText: "Utiliser mot de passe"
+      })
+
+      // Si c'est validé, on récupère les identifiants
+      const credentials = await NativeBiometric.getCredentials({
+        server: "hse-passport.madagreen.com"
+      })
+
+      if (credentials) {
+        const uEmail = credentials.username.toLowerCase()
+        const uPassword = credentials.password
+        
+        const all = [...accounts, ...INITIAL_ACCOUNTS]
+        const acc = all.find(a => a.email.toLowerCase() === uEmail && a.password === uPassword)
+        
+        if (acc) {
+          setCurrentUser(acc)
+          setIsAuthenticated(true)
+          showToast(`Accès autorisé : ${acc.email}`)
+        } else {
+          showToast("Session expirée ou compte obsolète", "danger")
+        }
+      }
+    } catch (err) {
+      if (err.message.includes("No credentials")) {
+        showToast("Connectez-vous une fois avec mot de passe pour activer l'empreinte", "info")
+      } else if (err.message !== "User cancelled") {
+        showToast("Erreur Biométrique", "danger")
+      }
+    }
+  }
+
   const handleLogin = async (e) => {
     e.preventDefault()
-    const email = e.target.email.value
-    const password = e.target.password.value
+    const emailInput = e.target.email.value.trim().toLowerCase()
+    const passwordInput = e.target.password.value.trim()
+
+    const finalizeAuth = async (account) => {
+      setCurrentUser(account)
+      setIsAuthenticated(true)
+      
+      if (isBiometryAvailable) {
+        if (window.confirm("Activer l'empreinte digitale pour ce compte ?")) {
+          try {
+            const { NativeBiometric } = await import('@capgo/capacitor-native-biometric')
+            await NativeBiometric.setCredentials({
+              username: emailInput,
+              password: passwordInput,
+              server: "hse-passport.madagreen.com"
+            })
+            showToast("Empreinte activée !")
+          } catch (err) {
+            console.error("Biometry error", err)
+          }
+        }
+      }
+    }
 
     if (isProd) {
-      try {
-        const res = await fetch(`${API_URL}/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
-        })
-        const data = await res.json()
-        if (data.success) {
-          setCurrentUser(data.account)
-          setIsAuthenticated(true)
-          showToast(`Connexion API réussie (${data.account.role})`)
-        } else {
-          showToast(data.message || "Identifiants invalides", "danger")
+      if (isOnline) {
+        try {
+          const { CapacitorHttp } = await import('@capacitor/core')
+          const res = await CapacitorHttp.post({
+            url: `${API_URL}/login`,
+            headers: { 'Content-Type': 'application/json' },
+            data: { email: emailInput, password: passwordInput },
+            connectTimeout: 5000, 
+            readTimeout: 5000
+          })
+          
+          if (res.status === 200 && res.data.success) {
+            finalizeAuth(res.data.account)
+            return 
+          }
+        } catch (err) {
+          console.warn("Mode local activé")
         }
-      } catch (err) {
-        showToast("Erreur de connexion Serveur / Base de données", "danger")
+      }
+
+      const all = [...accounts, ...INITIAL_ACCOUNTS]
+      const acc = all.find(a => a.email.toLowerCase() === emailInput && a.password === passwordInput)
+      
+      if (acc) {
+        finalizeAuth(acc)
+      } else {
+        showToast("Identifiants incorrects", "danger")
       }
     } else {
-      const account = accounts.find(a => a.email === email && a.password === password)
-      if (account) {
-        setCurrentUser(account)
-        setIsAuthenticated(true)
-        showToast(`Connexion locale (${account.role})`)
+      const acc = accounts.find(a => a.email === emailInput && a.password === passwordInput)
+      if (acc) {
+        finalizeAuth(acc)
       } else {
-        showToast("Email ou mot de passe incorrect", "danger")
+        showToast("Erreur login démo", "danger")
       }
     }
   }
@@ -223,17 +428,10 @@ function App() {
 
     } else if (confirmDialog.type === 'employee') {
       const id = confirmDialog.item.matricule;
-      if (isProd) {
-        try {
-          await fetch(`${API_URL}/employees/${id}`, { method: 'DELETE' })
-        } catch (err) {
-          showToast("Erreur API PostgreSQL", "danger");
-          setConfirmDialog({ isOpen: false, item: null, type: '' });
-          return;
-        }
-      }
-      setEmployees(prev => prev.filter(e => e.matricule !== id))
-      showToast("Employé supprimé définitivement", 'danger')
+      const updatedEmployees = employees.filter(e => e.matricule !== id)
+      setEmployees(updatedEmployees)
+      localStorage.setItem(`hse_employees_v2${DB_PREFIX}`, JSON.stringify(updatedEmployees))
+      showToast("Employé retiré localement (Synchronisez pour effacer du serveur)", 'warning')
     }
     setConfirmDialog({ isOpen: false, item: null, type: '' });
   }
@@ -246,7 +444,7 @@ function App() {
     setDraftCert({ name: '', dateObtention: '', validite: '', dateExpiration: '' })
   }
 
-  const saveEmployee = async (e) => {
+  const saveEmployee = (e) => {
     e.preventDefault()
     const compliance = calculateCompliance(formData.certifications)
     const newEmp = {
@@ -257,27 +455,14 @@ function App() {
       matricule: formData.matricule || `HSE-${Math.floor(Math.random() * 900) + 100}-PX`
     }
 
-    if (isProd) {
-      try {
-        await fetch(`${API_URL}/employees`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newEmp)
-        })
-      } catch (err) {
-        showToast("Erreur d'enregistrement PostgreSQL", "danger");
-        return;
-      }
-    }
+    const updatedEmployees = employeeView === 'edit' 
+      ? employees.map(emp => emp.matricule === selectedEmployee.matricule ? newEmp : emp)
+      : [newEmp, ...employees]
 
-    setEmployees(prev => {
-      if (employeeView === 'edit') {
-        return prev.map(emp => emp.matricule === selectedEmployee.matricule ? newEmp : emp)
-      }
-      return [newEmp, ...prev]
-    })
+    setEmployees(updatedEmployees)
+    localStorage.setItem(`hse_employees_v2${DB_PREFIX}`, JSON.stringify(updatedEmployees))
 
-    showToast(employeeView === 'edit' ? "Mise à jour réussie" : "Nouvel arrivant enregistré")
+    showToast(employeeView === 'edit' ? "Mise à jour locale réussie" : "Nouvel arrivant enregistré localement")
     setEmployeeView('list')
     setFormData({ firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null })
   }
@@ -343,8 +528,29 @@ function App() {
       pdf.addImage(canvasRecto.toDataURL('image/png'), 'PNG', xPos, 15, imgW, imgH);
       pdf.addImage(canvasVerso.toDataURL('image/png'), 'PNG', xPos, 15 + imgH + 10, imgW, imgH);
 
-      pdf.save(`Badge_${selectedEmployee.matricule}.pdf`);
-      showToast("Badge téléchargé !");
+      const fileName = `Badge_${selectedEmployee.matricule}.pdf`;
+      
+      if (Capacitor.isNativePlatform()) {
+        const pdfData = pdf.output('datauristring');
+        const base64Data = pdfData.split(',')[1];
+
+        const savedFile = await Filesystem.writeFile({
+          path: fileName,
+          data: base64Data,
+          directory: Directory.Documents,
+        });
+
+        await Share.share({
+          title: 'HSE Badge',
+          text: `Badge de ${selectedEmployee.name}`,
+          url: savedFile.uri,
+          dialogTitle: 'Ouvrir ou Envoyer le Badge PDF',
+        });
+        showToast("Badge généré avec succès !");
+      } else {
+        pdf.save(fileName);
+        showToast("Badge téléchargé !");
+      }
     } catch (err) {
       console.error("Erreur PDF:", err);
       showToast("Erreur: " + err.message, "danger");
@@ -390,15 +596,15 @@ function App() {
 
   // --- Render ---
   return (
-    <div className="animate-fade-in">
-      <nav>
+    <div className={`app-wrapper ${theme}`}>
+      <nav className={!showHeader ? 'nav-hidden' : ''}>
         <div className="logo">
           <span>MADAGREEN POWER</span>
         </div>
 
-        <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+        <div className="nav-actions">
           {isProd && (
-            <span style={{ color: 'var(--accent)', fontSize: '0.8rem', padding: '4px 8px', borderRadius: '4px', background: 'var(--card-bg-hover)' }}>🟢 Prod DB</span>
+            <span className="mobile-hide" style={{ color: 'var(--accent)', fontSize: '0.8rem', padding: '4px 8px', borderRadius: '4px', background: 'var(--card-bg-hover)' }}>🟢 Prod DB</span>
           )}
 
           <button className="btn-icon" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Changer le thème">
@@ -407,14 +613,23 @@ function App() {
 
           {isAuthenticated && (
             <>
-              <span style={{ color: 'var(--text-dim)', fontSize: '0.9rem', marginRight: '1rem', display: 'flex', alignItems: 'center' }}>
+              <button 
+                className={`btn-icon ${isSyncing ? 'animate-spin' : ''}`} 
+                onClick={syncData} 
+                disabled={isSyncing}
+                style={{ color: isOnline ? 'var(--accent)' : 'var(--text-dim)' }}
+                title="Synchroniser avec le serveur"
+              >
+                ☁️
+              </button>
+              <span className="user-badge">
                 <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>{currentUser?.email}</span>&nbsp;({currentUser?.role})
               </span>
-              <button className="btn-secondary" style={{ padding: '0.5rem 1rem' }} onClick={() => setEmployeeView('list')}>Employés</button>
+              <button className={`btn-secondary nav-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => setEmployeeView('list')}>Employés</button>
               {currentUser?.role === 'Admin' && (
-                <button className="btn-secondary" style={{ padding: '0.5rem 1rem' }} onClick={() => setEmployeeView('settings')}>Paramètres</button>
+                <button className={`btn-secondary nav-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => setEmployeeView('settings')}>Paramètres</button>
               )}
-              <button className="btn-secondary" style={{ padding: '0.5rem 1rem', background: 'var(--danger-glow)', borderColor: 'transparent', color: 'var(--danger)' }} onClick={() => { setIsAuthenticated(false); setCurrentUser(null); }}>Déconnexion</button>
+              <button className={`btn-secondary nav-btn logout-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => { setIsAuthenticated(false); setCurrentUser(null); }}>Déconnexion</button>
             </>
           )}
         </div>
@@ -422,7 +637,7 @@ function App() {
 
       <main className="container" style={!isAuthenticated ? { padding: 0 } : {}}>
         {!isAuthenticated ? (
-          <div style={{
+          <div className="login-wrapper" style={{
             minHeight: '100vh',
             backgroundImage: `url(${mgpBg})`,
             backgroundSize: 'cover',
@@ -430,124 +645,158 @@ function App() {
             backgroundRepeat: 'no-repeat',
             position: 'fixed',
             top: 0, left: 0, right: 0, bottom: 0,
-            zIndex: 0,
-            display: 'flex'
+            zIndex: 1000,
+            display: 'flex',
+            flexWrap: 'wrap',
+            overflowY: 'auto'
           }}>
             {/* Left branding panel */}
-            <div style={{
-              flex: '1 1 55%',
+            <div className="login-branding" style={{
+              flex: '1 1 300px',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'flex-end',
-              padding: '4rem',
-              background: 'linear-gradient(to top, rgba(3,8,18,0.75) 0%, transparent 60%)',
+              padding: '2rem',
+              background: 'linear-gradient(to top, rgba(3,8,18,0.85) 0%, transparent 60%)',
+              minHeight: '40vh'
             }}>
-              <h1 style={{ fontSize: '3rem', fontWeight: '900', lineHeight: 1.1, marginBottom: '1rem', color: '#fff', textShadow: '0 2px 16px rgba(0,0,0,0.8)' }}>
+              <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3rem)', fontWeight: '900', lineHeight: 1.1, marginBottom: '0.5rem', color: '#fff' }}>
                 HSE Passport
               </h1>
-              <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '1rem', maxWidth: '380px', lineHeight: 1.7, textShadow: '0 1px 8px rgba(0,0,0,0.9)' }}>
-                Plateforme de gestion des habilitations et certifications sécurité.
+              <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.9rem', maxWidth: '380px', lineHeight: 1.5 }}>
+                Plateforme de gestion des habilitations et certifications sécurité pour Madagreen Power.
               </p>
-              <div style={{ display: 'flex', gap: '2.5rem', marginTop: '2.5rem' }}>
-                {[['🛡️', 'Conformité HSE'], ['📋', 'Dossiers Employés'], ['🎫', 'Passeports Sécurité']].map(([icon, label]) => (
-                  <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem' }}>
-                    <span style={{ fontSize: '1.6rem', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.8))' }}>{icon}</span>
-                    <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', letterSpacing: '1px', textAlign: 'center', textShadow: '0 1px 6px rgba(0,0,0,0.9)' }}>{label}</span>
+              <div style={{ display: 'flex', gap: '1.5rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
+                {[['🛡️', 'HSE'], ['📋', 'Dossiers'], ['🎫', 'Passeports']].map(([icon, label]) => (
+                  <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
+                    <span style={{ fontSize: '1.4rem' }}>{icon}</span>
+                    <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', letterSpacing: '1px' }}>{label}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Right login panel — no card */}
-            <div className="animate-slide-up" style={{
-              flex: '0 0 400px',
+            {/* Right login panel */}
+            <div className="login-panel animate-slide-up" style={{
+              flex: '1 1 400px',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'center',
-              padding: '4rem 3.5rem',
-              background: 'rgba(5, 10, 22, 0.82)',
+              padding: '2rem',
+              background: 'rgba(5, 10, 22, 0.85)',
               backdropFilter: 'blur(24px)',
-              borderLeft: '1px solid rgba(255,255,255,0.07)'
+              borderLeft: '1px solid rgba(255,255,255,0.1)'
             }}>
-              <p style={{ color: 'var(--primary)', fontSize: '0.8rem', fontWeight: '700', letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Espace Sécurisé</p>
-              <h2 style={{ fontSize: '2rem', fontWeight: '800', marginBottom: '0.5rem' }}>Connexion</h2>
-              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.9rem', marginBottom: '3rem' }}>Identifiez-vous pour accéder au système.</p>
+              <div className="glass-panel" style={{ padding: '2.5rem', maxWidth: '420px', width: '100%', margin: '0 auto' }}>
+                <p style={{ color: 'var(--primary)', fontSize: '0.7rem', fontWeight: '700', letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Espace Sécurisé</p>
+                <h2 style={{ fontSize: '1.8rem', fontWeight: '800', marginBottom: '0.5rem' }}>Connexion</h2>
+                <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '2rem' }}>Identifiez-vous pour accéder au système.</p>
 
-              <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '0.6rem' }}>Adresse Email</label>
-                  <input
-                    type="email" name="email"
-                    placeholder="admin@madagreen.com"
-                    required
-                    style={{
-                      width: '100%', background: 'transparent', border: 'none',
-                      borderBottom: '2px solid rgba(255,255,255,0.2)',
-                      color: 'white', fontSize: '1rem', padding: '0.6rem 0',
-                      outline: 'none', boxSizing: 'border-box',
-                      transition: 'border-color 0.3s'
-                    }}
-                    onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
-                    onBlur={e => e.target.style.borderBottomColor = 'rgba(255,255,255,0.2)'}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '0.6rem' }}>Mot de passe</label>
-                  <input
-                    type="password" name="password"
-                    placeholder="••••••••"
-                    required
-                    style={{
-                      width: '100%', background: 'transparent', border: 'none',
-                      borderBottom: '2px solid rgba(255,255,255,0.2)',
-                      color: 'white', fontSize: '1rem', padding: '0.6rem 0',
-                      outline: 'none', boxSizing: 'border-box',
-                      transition: 'border-color 0.3s'
-                    }}
-                    onFocus={e => e.target.style.borderBottomColor = 'var(--primary)'}
-                    onBlur={e => e.target.style.borderBottomColor = 'rgba(255,255,255,0.2)'}
-                  />
-                </div>
-                <button type="submit" style={{
-                  marginTop: '1rem',
-                  padding: '1rem',
-                  background: 'var(--primary)',
-                  border: 'none',
-                  borderRadius: '8px',
-                  color: 'white',
-                  fontSize: '1rem',
-                  fontWeight: '700',
-                  letterSpacing: '1px',
-                  cursor: 'pointer',
-                  transition: 'opacity 0.2s, transform 0.2s',
-                  boxShadow: '0 0 24px var(--primary-glow)'
-                }}
-                  onMouseEnter={e => { e.target.style.opacity = '0.85'; e.target.style.transform = 'translateY(-1px)'; }}
-                  onMouseLeave={e => { e.target.style.opacity = '1'; e.target.style.transform = 'translateY(0)'; }}
-                >
-                  S'authentifier →
-                </button>
-              </form>
+                <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-dim)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Adresse Email</label>
+                    <input
+                      type="email" name="email"
+                      placeholder="admin@madagreen.com"
+                      required
+                      style={{
+                        width: '100%', background: 'rgba(255,255,255,0.03)', border: 'none',
+                        borderBottom: '2px solid rgba(255,255,255,0.1)',
+                        color: 'white', fontSize: '1rem', padding: '0.8rem 0',
+                        outline: 'none', boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-dim)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Mot de passe</label>
+                    <input
+                      type="password" name="password"
+                      placeholder="••••••••"
+                      required
+                      style={{
+                        width: '100%', background: 'rgba(255,255,255,0.03)', border: 'none',
+                        borderBottom: '2px solid rgba(255,255,255,0.1)',
+                        color: 'white', fontSize: '1rem', padding: '0.8rem 0',
+                        outline: 'none', boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                  <button type="submit" className="btn-primary" style={{ marginTop: '1rem', width: '100%' }}>
+                    Se connecter →
+                  </button>
 
-              <p style={{ marginTop: '3rem', fontSize: '0.75rem', color: 'rgba(255,255,255,0.25)', textAlign: 'center' }}>
-                © {new Date().getFullYear()} Madagreen Power — Tous droits réservés
-              </p>
+                  {isBiometryAvailable && (
+                    <div className="fingerprint-container" onClick={handleBiometricLogin}>
+                      <div className="fingerprint-scanner">
+                        <div className="pulse-rings"></div>
+                        <div className="scan-line"></div>
+                        <svg className="fingerprint-svg" viewBox="0 0 448 512">
+                          <path d="M224 48c70.7 0 128 57.3 128 128s-57.3 128-128 128s-128-57.3-128-128s57.3-128 128-128zm89.6 128c0-49.5-40.1-89.6-89.6-89.6s-89.6 40.1-89.6 89.6s40.1 89.6 89.6 89.6s89.6-40.1 89.6-89.6zM224 0C100.3 0 0 100.3 0 224v240c0 26.5 21.5 48 48 48h352c26.5 0 48-21.5 48-48V224C448 100.3 347.7 0 224 0zM400 464H48V224c0-97.1 78.9-176 176-176s176 78.9 176 176v240z"/>
+                        </svg>
+                      </div>
+                      <p className="biometry-text">Toucher pour scanner</p>
+                    </div>
+                  )}
+                </form>
+
+                <p style={{ marginTop: '2.5rem', fontSize: '0.7rem', color: 'var(--text-dim)', textAlign: 'center' }}>
+                  © {new Date().getFullYear()} Madagreen Power — Tous droits réservés
+                </p>
+              </div>
             </div>
           </div>
         ) : (
           <div className="animate-fade-in">
+            {/* Critical Alerts Section */}
+            {employees.some(e => e.certifications.some(c => {
+              const diff = new Date(c.dateExpiration) - new Date();
+              return diff > 0 && diff < (30 * 24 * 60 * 60 * 1000);
+            })) && (
+              <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', borderLeft: '4px solid var(--warning)', background: 'rgba(245, 158, 11, 0.05)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+                  <div>
+                    <h3 style={{ fontSize: '0.9rem', color: 'var(--warning)', margin: 0 }}>Alertes Expirations Proches ( &lt; 30 jours )</h3>
+                    <p style={{ fontSize: '0.8rem', margin: '0.2rem 0 0' }}>Certains passeports nécessitent une mise à jour immédiate.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {employeeView === 'list' ? (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem', marginBottom: '3rem' }}>
+                <div className="responsive-grid" style={{ marginBottom: '2rem' }}>
                   <StatCard label="Effectif Total" value={employees.length} color="primary" />
                   <StatCard label="Taux de Conformité" value={`${Math.round(employees.reduce((acc, e) => acc + e.compliance, 0) / (employees.length || 1))}%`} color="accent" />
                   <StatCard label="Alertes Critiques" value={employees.filter(e => e.compliance < 60).length} color="danger" />
                 </div>
 
+                {/* Advanced Department Analytics */}
+                <div className="glass-panel" style={{ padding: '2rem', marginBottom: '3rem' }}>
+                  <h3 style={{ fontSize: '1.1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>📊 Analyse par Département</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem' }}>
+                    {[...new Set(employees.map(e => e.departement))].map(dept => {
+                      const deptEmps = employees.filter(e => e.departement === dept);
+                      const avgComp = Math.round(deptEmps.reduce((acc, e) => acc + e.compliance, 0) / deptEmps.length);
+                      return (
+                        <div key={dept}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                            <span>{dept}</span>
+                            <span>{avgComp}%</span>
+                          </div>
+                          <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${avgComp}%`, background: avgComp >= 90 ? 'var(--accent)' : (avgComp >= 60 ? 'var(--warning)' : 'var(--danger)'), transition: 'width 1s ease' }}></div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="glass-panel" style={{ padding: '2rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', flexWrap: 'wrap', gap: '1.5rem' }}>
+                  <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', flexWrap: 'wrap', gap: '1.5rem' }}>
                     <h2>Liste des personnels</h2>
-                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                    <div className="controls-group" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                       <button className="btn-secondary" onClick={exportCSV}>📥 CSV</button>
                       <select className="glass-input" style={{ width: '160px' }} value={filterDept} onChange={e => setFilterDept(e.target.value)}>
                         <option value="Tous">Tous Depts</option>
@@ -576,7 +825,7 @@ function App() {
 
                 <div style={{ background: 'var(--card-bg-light)', padding: '2rem', borderRadius: '16px', marginBottom: '3rem' }}>
                   <h3 style={{ marginBottom: '1.5rem' }}>Créer un nouvel accès</h3>
-                  <form onSubmit={handleAccountCreate} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                  <form onSubmit={handleAccountCreate} className="form-grid" style={{ gap: '1.5rem' }}>
                     <div style={{ gridColumn: 'span 2' }}>
                       <label className="input-label">Email de connexion</label>
                       <input type="email" className="glass-input" value={newAccountFormData.email} onChange={e => setNewAccountFormData({ ...newAccountFormData, email: e.target.value })} required placeholder="nom@entreprise.com" />
@@ -620,8 +869,8 @@ function App() {
                   <h2>{employeeView === 'add' ? "Creation employé" : "Mise à jour Dossier"}</h2>
                 </div>
 
-                <form onSubmit={saveEmployee} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-                  <div style={{ gridRow: 'span 3', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', background: 'var(--card-bg-light)', padding: '2rem', borderRadius: '24px' }}>
+                <form onSubmit={saveEmployee} className="form-grid">
+                  <div className="avatar-upload-area">
                     <div className="avatar" style={{ width: '180px', height: '180px', cursor: 'pointer' }} onClick={() => document.getElementById('file-up').click()}>
                       <img src={formData.avatar || avatarPlaceholder} />
                       <div style={{ position: 'absolute', bottom: '15px', right: '15px', background: 'var(--primary)', padding: '8px', borderRadius: '50%', boxShadow: '0 5px 15px var(--primary-glow)' }}>📷</div>
@@ -665,7 +914,7 @@ function App() {
                       ))}
                     </div>
 
-                    <div style={{ background: 'var(--card-bg-medium)', padding: '1.5rem', borderRadius: '16px', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '1rem', alignItems: 'end' }}>
+                    <div className="badge-stats-grid">
                       <div>
                         <label className="input-label">Type de formation</label>
                         <select className="glass-input" value={draftCert.name} onChange={e => setDraftCert(d => ({ ...d, name: e.target.value }))}>
@@ -681,32 +930,32 @@ function App() {
                         <label className="input-label">Validité (ans)</label>
                         <input type="number" className="glass-input" value={draftCert.validite} onChange={e => setDraftCert(d => ({ ...d, validite: e.target.value }))} />
                       </div>
-                      <button type="button" className="btn-secondary" onClick={addCert} style={{ height: '46px' }}>Ajouter</button>
+                      <button type="button" className="btn-secondary" onClick={addCert} style={{ height: '46px', width: '100%' }}>Ajouter</button>
                     </div>
                   </div>
 
-                  <div style={{ gridColumn: 'span 2', display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+                  <div className="form-actions">
                     <button type="submit" className="btn-primary" style={{ flex: 1, justifyContent: 'center' }}>{employeeView === 'edit' ? "Mettre à jour" : "Enregistrer le dossier"}</button>
                     <button type="button" className="btn-secondary" style={{ flex: 1 }} onClick={() => setEmployeeView('list')}>Annuler</button>
                   </div>
                 </form>
               </div>
             ) : employeeView === 'badge' ? (
-              <section className="dashboard-grid animate-fade-in" style={{ maxWidth: '1100px', margin: '0 auto' }}>
-                <div className="glass-panel profile-main" style={{ padding: '3rem' }}>
-                  <button className="btn-icon" style={{ position: 'absolute', top: '2rem', right: '2rem' }} onClick={() => setEmployeeView('list')}>✕</button>
-                  <div className="profile-header">
-                    <div className="avatar" style={{ width: '150px', height: '150px' }}>
-                      <img src={selectedEmployee.avatar || avatarPlaceholder} />
+              <section className="animate-fade-in" style={{ width: '100%', maxWidth: '800px', margin: '0 auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                <div className="glass-panel profile-main" style={{ position: 'relative', padding: '1.5rem', width: '100%' }}>
+                  <button className="btn-icon" style={{ position: 'absolute', top: '1rem', right: '1rem', zIndex: 10 }} onClick={() => setEmployeeView('list')}>✕</button>
+                  <div className="profile-header" style={{ display: 'flex', gap: '2rem', alignItems: 'center', marginBottom: '3rem', padding: '1rem' }}>
+                    <div className="profile-image-wrapper" style={{ flexShrink: 0, width: '120px', height: '140px', borderRadius: '16px', overflow: 'hidden', border: '3px solid var(--primary-glow)', boxShadow: '0 10px 20px rgba(0,0,0,0.2)' }}>
+                      <img src={selectedEmployee.avatar || avatarPlaceholder} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Avatar" />
                     </div>
-                    <div>
-                      <h1 style={{ marginBottom: '0.25rem' }}>{selectedEmployee.name}</h1>
-                      <p style={{ fontSize: '1.2rem', color: 'var(--primary)', fontWeight: '600' }}>{selectedEmployee.role}</p>
-                      <div className="id-badge">{selectedEmployee.matricule}</div>
+                    <div style={{ flex: 1 }}>
+                      <h1 style={{ marginBottom: '0.25rem', fontSize: '1.8rem' }}>{selectedEmployee.firstName}<br />{selectedEmployee.lastName?.toUpperCase()}</h1>
+                      <p style={{ fontSize: '1.1rem', color: 'var(--primary)', fontWeight: '600', marginBottom: '0.5rem' }}>{selectedEmployee.role}</p>
+                      <div className="id-badge" style={{ display: 'inline-block', background: 'var(--primary-glow)', padding: '4px 12px', borderRadius: '8px', fontSize: '0.8rem', fontFamily: 'monospace', fontWeight: 'bold', color: 'var(--primary)' }}>{selectedEmployee.matricule}</div>
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginBottom: '3rem' }}>
+                  <div className="badge-stats-grid">
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: '1.5rem', fontWeight: '800', color: selectedEmployee.compliance >= 90 ? 'var(--accent)' : 'var(--warning)' }}>{selectedEmployee.compliance}%</div>
                       <div className="input-label">Score HSE</div>
@@ -724,23 +973,30 @@ function App() {
                   <h3 style={{ marginBottom: '1.5rem', fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '2px' }}>Registre des Aptitudes</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {selectedEmployee.certifications.length > 0 ? selectedEmployee.certifications.map((c, i) => (
-                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg-medium)', padding: '1rem', borderRadius: '12px', borderLeft: `4px solid ${isExpired(c.dateExpiration) ? 'var(--danger)' : 'var(--accent)'}` }}>
-                        <div>
-                          <div style={{ fontWeight: '700' }}>{c.name}</div>
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Délivré le {c.dateObtention}</div>
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg-medium)', padding: '1rem', borderRadius: '12px', borderLeft: `4px solid ${isExpired(c.dateExpiration) ? 'var(--danger)' : ( (new Date(c.dateExpiration) - new Date()) < (30 * 24 * 60 * 60 * 1000) ? 'var(--warning)' : 'var(--accent)' )}` }}>
+                          <div>
+                            <div style={{ fontWeight: '700' }}>{c.name}</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Délivré le {c.dateObtention}</div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                              {(new Date(c.dateExpiration) - new Date()) < (30 * 24 * 60 * 60 * 1000) && !isExpired(c.dateExpiration) ? <span style={{ color: 'var(--warning)', fontWeight: '800' }}>BIENTÔT EXPIRED! </span> : null}
+                              {isExpired(c.dateExpiration) ? <span style={{ color: 'var(--danger)', fontWeight: '800' }}>EXPIRED! </span> : 'Expiration'}
+                            </div>
+                            <div style={{ fontWeight: '700', color: isExpired(c.dateExpiration) ? 'var(--danger)' : 'var(--text-main)' }}>{c.dateExpiration}</div>
+                          </div>
                         </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>Expiration</div>
-                          <div style={{ fontWeight: '700', color: isExpired(c.dateExpiration) ? 'var(--danger)' : 'var(--text-main)' }}>{c.dateExpiration}</div>
-                        </div>
-                      </div>
                     )) : <p>Aucun certificat enregistré.</p>}
                   </div>
 
-                  <div style={{ display: 'flex', gap: '1rem', marginTop: '3rem' }}>
-                    <button className="btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={printBadge}>⎙ Imprimer le Badge PDF</button>
+                  <div className="form-actions" style={{ marginTop: '2.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', width: '100%' }}>
+                    <button className="btn-primary" style={{ width: '100%', maxWidth: '300px', justifyContent: 'center', padding: '1.2rem' }} onClick={printBadge}>
+                      ⎙ Imprimer le Badge PDF
+                    </button>
                     {currentUser?.role === 'Admin' && (
-                      <button className="btn-secondary" style={{ flex: 1 }} onClick={() => startEdit(selectedEmployee)}>✎ Modifier le dossier</button>
+                      <button className="btn-secondary" style={{ width: '100%', maxWidth: '300px', justifyContent: 'center', padding: '1.2rem' }} onClick={() => startEdit(selectedEmployee)}>
+                        ✎ Modifier le dossier
+                      </button>
                     )}
                   </div>
                 </div>
@@ -816,7 +1072,10 @@ function App() {
                             {selectedEmployee.certifications.length > 0 ? (
                               selectedEmployee.certifications.map((c, i) => (
                                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', padding: '7px 0', fontSize: '10px' }}>
-                                  <div style={{ fontWeight: 'bold', color: '#334155' }}>{c.name}</div>
+                                  <div style={{ fontWeight: 'bold', color: '#334155', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                    {c.name}
+                                    {(new Date(c.dateExpiration) - new Date()) < (30 * 24 * 60 * 60 * 1000) && <span style={{ color: '#d97706', fontSize: '8px' }}>⚠️</span>}
+                                  </div>
                                   <div style={{ color: isExpired(c.dateExpiration) ? '#f43f5e' : '#10b981', fontWeight: '900' }}>{c.dateExpiration}</div>
                                 </div>
                               ))

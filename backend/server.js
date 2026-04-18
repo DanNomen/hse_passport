@@ -1,14 +1,26 @@
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 3009;
 
-// Middleware : on augmente la limite à 10mb pour gérer les photos (avatars en base64)
+// --- SÉCURITÉ RÉSEAU ---
+app.use(helmet()); // Protège les en-têtes HTTP
 app.use(cors());
-app.use(express.json({ limit: '10mb' })); 
+app.use(express.json({ limit: '50mb' }));
+
+// Limiter les tentatives de connexion (Brute Force Protection)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Max 10 tentatives par IP
+  message: { success: false, message: "Trop de tentatives de connexion. Réessayez dans 15 minutes." }
+});
+
+app.use('/api/login', loginLimiter);
 
 // Database connection
 const pool = new Pool({
@@ -98,6 +110,20 @@ app.delete('/api/accounts/:email', async (req, res) => {
   try {
     await pool.query('DELETE FROM accounts WHERE email = $1', [req.params.email]);
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const result = await pool.query('SELECT * FROM accounts WHERE email = $1 AND password = $2', [email, password]);
+    if (result.rows.length > 0) {
+      res.json({ success: true, account: result.rows[0] });
+    } else {
+      res.status(401).json({ success: false, message: 'Identifiants invalides' });
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

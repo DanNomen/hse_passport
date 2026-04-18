@@ -1,0 +1,13 @@
+{
+  "appId": "com.hsepasseport.app",
+  "appName": "HSE PASSPORT",
+  "webDir": "dist",
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  },
+  "server": {
+    "allowNavigation": ["*"]
+  }
+}
