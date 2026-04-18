@@ -151,6 +151,26 @@ h2 {
   font-weight: 600;
 }
 
+.btn-icon {
+  background: var(--btn-icon-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text-dim);
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-icon:hover {
+  background: var(--btn-icon-hover);
+  color: var(--text-main);
+  border-color: rgba(255,255,255,0.2);
+}
+
 /* Navbar */
 nav {
   position: sticky;
@@ -162,7 +182,37 @@ nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 2rem;
+  height: 70px;
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.user-badge {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  background: var(--card-bg-light);
+  padding: 0.4rem 1rem;
+  border-radius: 99px;
+  border: 1px solid var(--glass-border);
+}
+
+.nav-btn {
+  padding: 0.5rem 1rem !important;
+  font-size: 0.85rem !important;
+}
+
+.logo span {
+  font-size: 1.2rem;
+  font-weight: 800;
+  background: linear-gradient(to right, var(--primary), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: 1px;
 }
 
 /* --- Responsive Layouts --- */
@@ -185,19 +235,24 @@ nav {
 }
 
 /* --- MOBILE SPECIFIC FIXES --- */
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
   nav {
-    flex-direction: column;
-    gap: 1rem;
-    padding: 1rem;
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+    padding: 1rem !important;
+    height: auto !important;
   }
   
   .nav-actions {
-    width: 100%;
-    justify-content: center;
-    gap: 0.8rem;
-    display: flex;
-    flex-wrap: wrap;
+    width: 100% !important;
+    justify-content: center !important;
+    gap: 0.5rem !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+  }
+
+  .user-badge {
+    display: none !important;
   }
 
   .mobile-hide {

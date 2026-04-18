@@ -603,11 +603,8 @@ function App() {
         </div>
 
         <div className="nav-actions">
-          {isProd && (
-            <span className="mobile-hide" style={{ color: 'var(--accent)', fontSize: '0.8rem', padding: '4px 8px', borderRadius: '4px', background: 'var(--card-bg-hover)' }}>🟢 Prod DB</span>
-          )}
-
-          <button className="btn-icon" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Changer le thème">
+          {isProd && <span className="mobile-hide" style={{ color: 'var(--accent)', fontSize: '0.75rem', fontWeight: 'bold' }}>🟢 PROD DB</span>}
+          <button className="btn-icon" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
 
