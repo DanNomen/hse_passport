@@ -303,7 +303,8 @@ function App() {
         })
         if (res.status !== 200 || !res.data.success) throw new Error()
       } catch (err) {
-        showToast("Erreur API", "danger");
+        console.error('API Error Create Account:', err);
+        showToast(`Erreur API: ${err.message || "Impossible de joindre le serveur"}`, "danger");
         return;
       }
     }
@@ -326,7 +327,8 @@ function App() {
           const { CapacitorHttp } = await import('@capacitor/core')
           await CapacitorHttp.delete({ url: `${API_URL}/accounts/${email}` })
         } catch (err) {
-          showToast("Erreur API de suppression", "danger");
+          console.error('API Error Delete Account:', err);
+          showToast(`Erreur API de suppression: ${err.message || "Serveur injoignable"}`, "danger");
           setConfirmDialog({ isOpen: false, item: null, type: '' });
           return;
         }
@@ -775,7 +777,7 @@ function App() {
                       </select>
                       <input type="text" className="glass-input" placeholder="Rechercher..." style={{ width: '220px' }} value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                       {currentUser?.role === 'Admin' && (
-                        <button className="btn-primary" onClick={() => { setFormData({ firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null }); setEmployeeView('add') }}>+ Nouveau</button>
+                        <button className="btn-primary" onClick={() => { setFormData({ firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true, epis: { gants: { checked: false, date: '' }, chaussures: { checked: false, date: '' }, casques: { checked: false, date: '' }, uniforme: { checked: false, date: '' }, gillet: { checked: false, date: '' } } }); setEmployeeView('add') }}>+ Nouveau</button>
                       )}
                     </div>
                   </div>
