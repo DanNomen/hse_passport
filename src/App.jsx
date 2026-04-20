@@ -555,14 +555,14 @@ function App() {
                   {currentUser?.role === 'Admin' && (
                     <button className={`btn-secondary nav-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => setEmployeeView('settings')}>Paramètres</button>
                   )}
-                  <button className={`btn-secondary nav-btn logout-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => { setIsAuthenticated(false); setCurrentUser(null); }}>Déconnexion</button>
+                  <button className={`btn-secondary nav-btn logout-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => { setIsAuthenticated(false); setCurrentUser(null); setSelectedHub(null); }}>Déconnexion</button>
                 </>
               ) : (
                 <>
                   <span className="user-badge" style={{ marginRight: '1rem' }}>
                     <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>{currentUser?.email}</span>
                   </span>
-                  <button className="btn-secondary nav-btn logout-btn" onClick={() => { setIsAuthenticated(false); setCurrentUser(null); }}>Déconnexion</button>
+                  <button className="btn-secondary nav-btn logout-btn" onClick={() => { setIsAuthenticated(false); setCurrentUser(null); setSelectedHub(null); }}>Déconnexion</button>
                 </>
               )}
             </>
