@@ -1056,6 +1056,9 @@ function App() {
                                 <span style={{ color: '#1c4c8d', fontWeight: '700', fontSize: '10px', textTransform: 'uppercase' }}>Département & Fonction</span>
                                 <span style={{ fontWeight: '600', fontSize: '12px', color: '#64748b' }}>{selectedEmployee.departement} • {selectedEmployee.role}</span>
                               </div>
+                              <div style={{ background: selectedEmployee.aptitudeMedicale !== false ? '#dcfce7' : '#fee2e2', color: selectedEmployee.aptitudeMedicale !== false ? '#166534' : '#991b1b', padding: '6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '12px', textTransform: 'uppercase', marginTop: '5px' }}>
+                                Aptitude : {selectedEmployee.aptitudeMedicale !== false ? '✅ APTE' : '❌ INAPTE'}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1073,6 +1076,12 @@ function App() {
                           HABILITATIONS & APTITUDES
                         </div>
                         <div style={{ flex: 1, padding: '5mm', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: '1' }}>
+                          
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: selectedEmployee.aptitudeMedicale !== false ? '#10b981' : '#f43f5e', color: 'white', padding: '5px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', marginBottom: '15px' }}>
+                            <span>Aptitude Médicale</span>
+                            <span>{selectedEmployee.aptitudeMedicale !== false ? 'APTE' : 'INAPTE'}</span>
+                          </div>
+
                           <div style={{ fontSize: '10px', fontWeight: '900', color: '#1e293b', borderBottom: '2px solid #1e293b', paddingBottom: '5px', marginBottom: '10px' }}>LISTE DES CERTIFICATIONS</div>
                           <div style={{ flex: 1 }}>
                             {selectedEmployee.certifications.length > 0 ? (
