@@ -13,7 +13,7 @@ import './App.css'
 // Constants
 const CERTIFICATION_LIST = [
   "Aptitude médicale", "TH - Port Harnais", "HT - BT", "ATEX niv1",
-  "Secourisme", "Lutte contre l'incendie", "Sauvetage en Hauteur"
+  "Secourisme", "Lutte contre l'incendie", "Sauvetage en Hauteur", "Verification echaffaudage"
 ]
 
 const INITIAL_EMPLOYEES = []
@@ -39,7 +39,7 @@ const getStatusLabel = (comp) => {
 }
 
 function App() {
-  const isProd = true 
+  const isProd = true
   const API_URL = 'http://46.105.75.234:3009/api'.trim()
   const DB_PREFIX = '_prod' // Stable prefix for mobile production
 
@@ -87,9 +87,9 @@ function App() {
       if (isProd && isAuthenticated) {
         try {
           const { CapacitorHttp } = await import('@capacitor/core')
-          
+
           // Récupérer les comptes
-          const resAcc = await CapacitorHttp.get({ 
+          const resAcc = await CapacitorHttp.get({
             url: `${API_URL}/accounts`,
             connectTimeout: 30000,
             readTimeout: 30000
@@ -100,7 +100,7 @@ function App() {
           }
 
           // Récupérer les employés
-          const resEmp = await CapacitorHttp.get({ 
+          const resEmp = await CapacitorHttp.get({
             url: `${API_URL}/employees`,
             connectTimeout: 30000,
             readTimeout: 30000
@@ -149,7 +149,7 @@ function App() {
       setDraftCert(prev => ({ ...prev, dateExpiration: date.toISOString().split('T')[0] }))
     }
   }, [draftCert.dateObtention, draftCert.validite])
-  
+
   // Smart Header Logic
   useEffect(() => {
     const handleScroll = () => {
@@ -250,7 +250,7 @@ function App() {
   const handleBiometricLogin = async () => {
     try {
       const { NativeBiometric } = await import('@capgo/capacitor-native-biometric')
-      
+
       // FORCER l'affichage de la fenêtre d'empreinte
       await NativeBiometric.verifyIdentity({
         reason: "Accès sécurisé à HSE Passport",
@@ -268,10 +268,10 @@ function App() {
       if (credentials) {
         const uEmail = credentials.username.toLowerCase()
         const uPassword = credentials.password
-        
+
         const all = [...accounts, ...INITIAL_ACCOUNTS]
         const acc = all.find(a => a.email.toLowerCase() === uEmail && a.password === uPassword)
-        
+
         if (acc) {
           setCurrentUser(acc)
           setIsAuthenticated(true)
@@ -297,7 +297,7 @@ function App() {
     const finalizeAuth = async (account) => {
       setCurrentUser(account)
       setIsAuthenticated(true)
-      
+
       if (isBiometryAvailable) {
         if (window.confirm("Activer l'empreinte digitale pour ce compte ?")) {
           try {
@@ -323,13 +323,13 @@ function App() {
             url: `${API_URL}/login`,
             headers: { 'Content-Type': 'application/json' },
             data: { email: emailInput, password: passwordInput },
-            connectTimeout: 5000, 
+            connectTimeout: 5000,
             readTimeout: 5000
           })
-          
+
           if (res.status === 200 && res.data.success) {
             finalizeAuth(res.data.account)
-            return 
+            return
           }
         } catch (err) {
           console.warn("Mode local activé")
@@ -338,7 +338,7 @@ function App() {
 
       const all = [...accounts, ...INITIAL_ACCOUNTS]
       const acc = all.find(a => a.email.toLowerCase() === emailInput && a.password === passwordInput)
-      
+
       if (acc) {
         finalizeAuth(acc)
       } else {
@@ -403,12 +403,12 @@ function App() {
 
     } else if (confirmDialog.type === 'employee') {
       const id = confirmDialog.item.matricule;
-      
+
       if (isProd && isOnline) {
         try {
           const { CapacitorHttp } = await import('@capacitor/core')
           await CapacitorHttp.delete({ url: `${API_URL}/employees/${id}` })
-        } catch(e) {
+        } catch (e) {
           console.error("Delete online failed:", e);
         }
       }
@@ -440,7 +440,7 @@ function App() {
       matricule: formData.matricule || `HSE-${Math.floor(Math.random() * 900) + 100}-PX`
     }
 
-    const updatedEmployees = employeeView === 'edit' 
+    const updatedEmployees = employeeView === 'edit'
       ? employees.map(emp => emp.matricule === selectedEmployee.matricule ? newEmp : emp)
       : [newEmp, ...employees]
 
@@ -514,7 +514,7 @@ function App() {
       pdf.addImage(canvasVerso.toDataURL('image/png'), 'PNG', xPos, 15 + imgH + 10, imgW, imgH);
 
       const fileName = `Badge_${selectedEmployee.matricule}.pdf`;
-      
+
       if (Capacitor.isNativePlatform()) {
         const pdfData = pdf.output('datauristring');
         const base64Data = pdfData.split(',')[1];
@@ -595,9 +595,9 @@ function App() {
 
           {isAuthenticated && (
             <>
-              <button 
-                className="btn-icon" 
-                onClick={syncData} 
+              <button
+                className="btn-icon"
+                onClick={syncData}
                 disabled={isSyncing}
                 style={{ color: isOnline ? 'var(--accent)' : 'var(--text-dim)' }}
                 title="Synchroniser avec le serveur"
@@ -648,7 +648,7 @@ function App() {
               <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.9rem', maxWidth: '380px', lineHeight: 1.5 }}>
                 Plateforme de gestion des habilitations et certifications sécurité pour Madagreen Power.
               </p>
-              
+
               <div style={{ display: 'flex', gap: '1.5rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
                 {[['🛡️', 'HSE'], ['📋', 'Dossiers'], ['🎫', 'Passeports']].map(([icon, label]) => (
                   <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
@@ -714,7 +714,7 @@ function App() {
                         <div className="pulse-rings"></div>
                         <div className="scan-line"></div>
                         <svg className="fingerprint-svg" viewBox="0 0 448 512">
-                          <path d="M224 48c70.7 0 128 57.3 128 128s-57.3 128-128 128s-128-57.3-128-128s57.3-128 128-128zm89.6 128c0-49.5-40.1-89.6-89.6-89.6s-89.6 40.1-89.6 89.6s40.1 89.6 89.6 89.6s89.6-40.1 89.6-89.6zM224 0C100.3 0 0 100.3 0 224v240c0 26.5 21.5 48 48 48h352c26.5 0 48-21.5 48-48V224C448 100.3 347.7 0 224 0zM400 464H48V224c0-97.1 78.9-176 176-176s176 78.9 176 176v240z"/>
+                          <path d="M224 48c70.7 0 128 57.3 128 128s-57.3 128-128 128s-128-57.3-128-128s57.3-128 128-128zm89.6 128c0-49.5-40.1-89.6-89.6-89.6s-89.6 40.1-89.6 89.6s40.1 89.6 89.6 89.6s89.6-40.1 89.6-89.6zM224 0C100.3 0 0 100.3 0 224v240c0 26.5 21.5 48 48 48h352c26.5 0 48-21.5 48-48V224C448 100.3 347.7 0 224 0zM400 464H48V224c0-97.1 78.9-176 176-176s176 78.9 176 176v240z" />
                         </svg>
                       </div>
                       <p className="biometry-text">Toucher pour scanner</p>
@@ -735,16 +735,16 @@ function App() {
               const diff = new Date(c.dateExpiration) - new Date();
               return diff > 0 && diff < (30 * 24 * 60 * 60 * 1000);
             })) && (
-              <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', borderLeft: '4px solid var(--warning)', background: 'rgba(245, 158, 11, 0.05)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <span style={{ fontSize: '1.5rem' }}>⚠️</span>
-                  <div>
-                    <h3 style={{ fontSize: '0.9rem', color: 'var(--warning)', margin: 0 }}>Alertes Expirations Proches ( &lt; 30 jours )</h3>
-                    <p style={{ fontSize: '0.8rem', margin: '0.2rem 0 0' }}>Certains passeports nécessitent une mise à jour immédiate.</p>
+                <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', borderLeft: '4px solid var(--warning)', background: 'rgba(245, 158, 11, 0.05)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+                    <div>
+                      <h3 style={{ fontSize: '0.9rem', color: 'var(--warning)', margin: 0 }}>Alertes Expirations Proches ( &lt; 30 jours )</h3>
+                      <p style={{ fontSize: '0.8rem', margin: '0.2rem 0 0' }}>Certains passeports nécessitent une mise à jour immédiate.</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
             {employeeView === 'list' ? (
               <>
@@ -956,19 +956,19 @@ function App() {
                   <h3 style={{ marginBottom: '1.5rem', fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '2px' }}>Registre des Aptitudes</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {selectedEmployee.certifications.length > 0 ? selectedEmployee.certifications.map((c, i) => (
-                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg-medium)', padding: '1rem', borderRadius: '12px', borderLeft: `4px solid ${isExpired(c.dateExpiration) ? 'var(--danger)' : ( (new Date(c.dateExpiration) - new Date()) < (30 * 24 * 60 * 60 * 1000) ? 'var(--warning)' : 'var(--accent)' )}` }}>
-                          <div>
-                            <div style={{ fontWeight: '700' }}>{c.name}</div>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Délivré le {c.dateObtention}</div>
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-                              {(new Date(c.dateExpiration) - new Date()) < (30 * 24 * 60 * 60 * 1000) && !isExpired(c.dateExpiration) ? <span style={{ color: 'var(--warning)', fontWeight: '800' }}>BIENTÔT EXPIRED! </span> : null}
-                              {isExpired(c.dateExpiration) ? <span style={{ color: 'var(--danger)', fontWeight: '800' }}>EXPIRED! </span> : 'Expiration'}
-                            </div>
-                            <div style={{ fontWeight: '700', color: isExpired(c.dateExpiration) ? 'var(--danger)' : 'var(--text-main)' }}>{c.dateExpiration}</div>
-                          </div>
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg-medium)', padding: '1rem', borderRadius: '12px', borderLeft: `4px solid ${isExpired(c.dateExpiration) ? 'var(--danger)' : ((new Date(c.dateExpiration) - new Date()) < (30 * 24 * 60 * 60 * 1000) ? 'var(--warning)' : 'var(--accent)')}` }}>
+                        <div>
+                          <div style={{ fontWeight: '700' }}>{c.name}</div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Délivré le {c.dateObtention}</div>
                         </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                            {(new Date(c.dateExpiration) - new Date()) < (30 * 24 * 60 * 60 * 1000) && !isExpired(c.dateExpiration) ? <span style={{ color: 'var(--warning)', fontWeight: '800' }}>BIENTÔT EXPIRED! </span> : null}
+                            {isExpired(c.dateExpiration) ? <span style={{ color: 'var(--danger)', fontWeight: '800' }}>EXPIRED! </span> : 'Expiration'}
+                          </div>
+                          <div style={{ fontWeight: '700', color: isExpired(c.dateExpiration) ? 'var(--danger)' : 'var(--text-main)' }}>{c.dateExpiration}</div>
+                        </div>
+                      </div>
                     )) : <p>Aucun certificat enregistré.</p>}
                   </div>
 
