@@ -12,7 +12,7 @@ import './App.css'
 
 // Constants
 const CERTIFICATION_LIST = [
-  "Aptitude médicale", "TH - Port Harnais", "HT - BT", "ATEX niv1",
+  "TH - Port Harnais", "HT - BT", "ATEX niv1",
   "Secourisme", "Lutte contre l'incendie", "Sauvetage en Hauteur", "Verification echaffaudage"
 ]
 
@@ -73,7 +73,7 @@ function App() {
   const [toasts, setToasts] = useState([])
 
   const [formData, setFormData] = useState({
-    firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null
+    firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true
   })
   const [draftCert, setDraftCert] = useState({ name: '', dateObtention: '', validite: '', dateExpiration: '' })
   const [newAccountFormData, setNewAccountFormData] = useState({ email: '', password: '', role: 'Visiteur' })
@@ -449,12 +449,12 @@ function App() {
 
     showToast(employeeView === 'edit' ? "Mise à jour locale réussie" : "Nouvel arrivant enregistré localement")
     setEmployeeView('list')
-    setFormData({ firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null })
+    setFormData({ firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true })
   }
 
   const startEdit = (emp) => {
     setSelectedEmployee(emp)
-    setFormData({ ...emp })
+    setFormData({ ...emp, aptitudeMedicale: emp.aptitudeMedicale ?? true })
     setEmployeeView('edit')
   }
 
@@ -883,6 +883,22 @@ function App() {
                     <input type="text" name="matricule" className="glass-input" value={formData.matricule} onChange={handleFormChange} placeholder="AUTO-GEN" disabled={employeeView === 'edit'} />
                   </div>
 
+                  <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: '1.5rem', background: 'var(--card-bg-light)', padding: '1.5rem', borderRadius: '12px', borderLeft: formData.aptitudeMedicale ? '4px solid var(--accent)' : '4px solid var(--danger)' }}>
+                    <input 
+                      type="checkbox" 
+                      id="aptitudeMedicale" 
+                      checked={formData.aptitudeMedicale} 
+                      onChange={e => setFormData({ ...formData, aptitudeMedicale: e.target.checked })}
+                      style={{ width: '28px', height: '28px', cursor: 'pointer' }}
+                    />
+                    <div>
+                      <label htmlFor="aptitudeMedicale" style={{ fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer' }}>Aptitude Médicale</label>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', marginTop: '0.2rem' }}>
+                        {formData.aptitudeMedicale ? '🟢 Le collaborateur a été déclaré APTE' : '🔴 Le collaborateur a été déclaré INAPTE'}
+                      </div>
+                    </div>
+                  </div>
+
                   <div style={{ gridColumn: 'span 2', marginTop: '2rem' }}>
                     <h3 style={{ marginBottom: '1.5rem', fontSize: '1.1rem', color: 'var(--primary)' }}>Habilitations HSE</h3>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.5rem' }}>
@@ -953,7 +969,14 @@ function App() {
                     </div>
                   </div>
 
-                  <h3 style={{ marginBottom: '1.5rem', fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '2px' }}>Registre des Aptitudes</h3>
+                  <div style={{ background: 'var(--card-bg-medium)', padding: '1.5rem', borderRadius: '12px', textAlign: 'center', border: selectedEmployee.aptitudeMedicale ?? true ? '2px solid var(--accent-glow)' : '2px solid var(--danger-glow)' }}>
+                    <div style={{ fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '2px', color: 'var(--text-dim)', marginBottom: '0.5rem' }}>Aptitude Médicale Officielle</div>
+                    <div style={{ fontSize: '1.8rem', fontWeight: '900', color: selectedEmployee.aptitudeMedicale ?? true ? 'var(--accent)' : 'var(--danger)' }}>
+                      {selectedEmployee.aptitudeMedicale ?? true ? '✅ APTE' : '❌ INAPTE'}
+                    </div>
+                  </div>
+
+                  <h3 style={{ marginBottom: '1.5rem', fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '2px' }}>Registre des Formations</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {selectedEmployee.certifications.length > 0 ? selectedEmployee.certifications.map((c, i) => (
                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg-medium)', padding: '1rem', borderRadius: '12px', borderLeft: `4px solid ${isExpired(c.dateExpiration) ? 'var(--danger)' : ((new Date(c.dateExpiration) - new Date()) < (30 * 24 * 60 * 60 * 1000) ? 'var(--warning)' : 'var(--accent)')}` }}>

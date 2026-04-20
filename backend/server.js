@@ -52,9 +52,17 @@ const initDB = async () => {
         compliance INTEGER NOT NULL,
         status VARCHAR(50) NOT NULL,
         certifications JSONB NOT NULL DEFAULT '[]',
-        avatar TEXT
+        avatar TEXT,
+        aptitude_medicale BOOLEAN DEFAULT true
       );
     `);
+    
+    // Auto-migration (add column if missing)
+    try {
+      await pool.query('ALTER TABLE employees ADD COLUMN aptitude_medicale BOOLEAN DEFAULT true');
+    } catch(e) {
+      // Column already exists
+    }
     
     // Inject default initial admin
     const adminCheck = await pool.query('SELECT * FROM accounts WHERE email = $1', ['admin@madagreen.com']);
@@ -137,7 +145,8 @@ app.get('/api/employees', async (req, res) => {
     const formatted = result.rows.map(r => ({
       ...r,
       firstName: r.first_name,
-      lastName: r.last_name
+      lastName: r.last_name,
+      aptitudeMedicale: r.aptitude_medicale
     }));
     res.json({ success: true, employees: formatted });
   } catch (err) {
@@ -153,15 +162,15 @@ app.post('/api/employees', async (req, res) => {
       // Update
       await pool.query(`
         UPDATE employees 
-        SET first_name=$1, last_name=$2, name=$3, role=$4, departement=$5, compliance=$6, status=$7, certifications=$8, avatar=$9
+        SET first_name=$1, last_name=$2, name=$3, role=$4, departement=$5, compliance=$6, status=$7, certifications=$8, avatar=$9, aptitude_medicale=$11
         WHERE matricule=$10
-      `, [emp.firstName, emp.lastName, emp.name, emp.role, emp.departement, emp.compliance, emp.status, JSON.stringify(emp.certifications), emp.avatar, emp.matricule]);
+      `, [emp.firstName, emp.lastName, emp.name, emp.role, emp.departement, emp.compliance, emp.status, JSON.stringify(emp.certifications), emp.avatar, emp.matricule, emp.aptitudeMedicale ?? true]);
     } else {
       // Insert
       await pool.query(`
-        INSERT INTO employees (matricule, first_name, last_name, name, role, departement, compliance, status, certifications, avatar)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      `, [emp.matricule, emp.firstName, emp.lastName, emp.name, emp.role, emp.departement, emp.compliance, emp.status, JSON.stringify(emp.certifications), emp.avatar]);
+        INSERT INTO employees (matricule, first_name, last_name, name, role, departement, compliance, status, certifications, avatar, aptitude_medicale)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `, [emp.matricule, emp.firstName, emp.lastName, emp.name, emp.role, emp.departement, emp.compliance, emp.status, JSON.stringify(emp.certifications), emp.avatar, emp.aptitudeMedicale ?? true]);
     }
     res.json({ success: true });
   } catch (err) {
