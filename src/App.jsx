@@ -608,6 +608,10 @@ function App() {
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
 
+          <a href="/hse-passport.apk" download className="btn-icon mobile-hide" title="Télécharger l'application mobile" style={{ color: 'var(--primary)' }}>
+            📱
+          </a>
+
           {isAuthenticated && (
             <>
               <button 
@@ -663,7 +667,21 @@ function App() {
               <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.9rem', maxWidth: '380px', lineHeight: 1.5 }}>
                 Plateforme de gestion des habilitations et certifications sécurité pour Madagreen Power.
               </p>
-              <div style={{ display: 'flex', gap: '1.5rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
+              
+              <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <p style={{ color: 'var(--accent)', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>
+                  Disponible sur Android
+                </p>
+                <a href="/hse-passport.apk" download className="app-download-btn">
+                  <div className="app-download-icon">🤖</div>
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontSize: '0.6rem', opacity: 0.8, textTransform: 'uppercase' }}>Télécharger</div>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>Application Mobile</div>
+                  </div>
+                </a>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1.5rem', marginTop: '2.5rem', flexWrap: 'wrap' }}>
                 {[['🛡️', 'HSE'], ['📋', 'Dossiers'], ['🎫', 'Passeports']].map(([icon, label]) => (
                   <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
                     <span style={{ fontSize: '1.4rem' }}>{icon}</span>
