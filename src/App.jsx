@@ -16,19 +16,7 @@ const CERTIFICATION_LIST = [
   "Secourisme", "Lutte contre l'incendie", "Sauvetage en Hauteur"
 ]
 
-const INITIAL_EMPLOYEES = [
-  {
-    matricule: 'HSE-992-PX', firstName: 'Alexander', lastName: 'Volt', name: 'Alexander Volt', role: 'Senior Safety Auditor', departement: 'Audit Interne', compliance: 100, status: 'Actif', certifications: [
-      { name: "Aptitude médicale", dateObtention: "2025-01-10", validite: 1, dateExpiration: "2026-01-10" },
-      { name: "Secourisme", dateObtention: "2024-05-20", validite: 2, dateExpiration: "2026-05-20" }
-    ]
-  },
-  {
-    matricule: 'HSE-114-TR', firstName: 'Maria', lastName: 'Gonzalez', name: 'Maria Gonzalez', role: 'Ingénieur QSE', departement: 'Qualité', compliance: 100, status: 'Actif', certifications: [
-      { name: "TH - Port Harnais", dateObtention: "2024-11-05", validite: 3, dateExpiration: "2027-11-05" }
-    ]
-  }
-]
+const INITIAL_EMPLOYEES = []
 
 const INITIAL_ACCOUNTS = [
   { email: 'admin@madagreen.com', password: 'admin', role: 'Admin' },
@@ -202,29 +190,7 @@ function App() {
     try {
       const { CapacitorHttp } = await import('@capacitor/core')
 
-      // 1. PULL (Récupérer l'état actuel du serveur)
-      const optionsPull = {
-        url: `${API_URL}/employees`,
-        headers: { 'Content-Type': 'application/json' }
-      }
-      const resPull = await CapacitorHttp.get(optionsPull)
-      if (resPull.status !== 200) throw new Error("Erreur de connexion au serveur")
-      
-      const serverEmployees = resPull.data.employees || []
-      
-      // 2. DELETE (Supprimer du serveur ceux qui ne sont plus sur mobile)
-      // On considère ici que le mobile est le "Maitre" pour les suppressions effectuées localement
-      for (const sEmp of serverEmployees) {
-        const existsLocally = employees.some(e => e.matricule === sEmp.matricule)
-        if (!existsLocally) {
-          await CapacitorHttp.delete({
-            url: `${API_URL}/employees/${sEmp.matricule}`
-          })
-          console.log(`Supprimé du serveur : ${sEmp.matricule}`)
-        }
-      }
-
-      // 3. PUSH (Envoyer/Mettre à jour les locaux vers le serveur)
+      // 1. PUSH (Envoyer/Mettre à jour les locaux vers le serveur)
       for (const employee of employees) {
         try {
           const optionsPush = {
@@ -232,13 +198,22 @@ function App() {
             headers: { 'Content-Type': 'application/json' },
             data: employee
           }
-          const resPush = await CapacitorHttp.post(optionsPush)
-          if (resPush.status !== 200 && resPush.status !== 201) {
-            console.warn(`Échec de l'envoi pour ${employee.matricule}`)
-          }
+          await CapacitorHttp.post(optionsPush)
         } catch (pushErr) {
           console.error(`Erreur push ${employee.matricule}:`, pushErr)
         }
+      }
+
+      // 2. PULL (Récupérer l'état actuel du serveur pour mettre à jour le mobile)
+      const optionsPull = {
+        url: `${API_URL}/employees`,
+        headers: { 'Content-Type': 'application/json' }
+      }
+      const resPull = await CapacitorHttp.get(optionsPull)
+      if (resPull.status === 200 && resPull.data.success) {
+        const serverEmployees = resPull.data.employees || []
+        setEmployees(serverEmployees)
+        localStorage.setItem(`hse_employees_v2${DB_PREFIX}`, JSON.stringify(serverEmployees))
       }
 
       showToast("Synchronisation et mise à jour terminées !")
@@ -428,10 +403,20 @@ function App() {
 
     } else if (confirmDialog.type === 'employee') {
       const id = confirmDialog.item.matricule;
+      
+      if (isProd && isOnline) {
+        try {
+          const { CapacitorHttp } = await import('@capacitor/core')
+          await CapacitorHttp.delete({ url: `${API_URL}/employees/${id}` })
+        } catch(e) {
+          console.error("Delete online failed:", e);
+        }
+      }
+
       const updatedEmployees = employees.filter(e => e.matricule !== id)
       setEmployees(updatedEmployees)
       localStorage.setItem(`hse_employees_v2${DB_PREFIX}`, JSON.stringify(updatedEmployees))
-      showToast("Employé retiré localement (Synchronisez pour effacer du serveur)", 'warning')
+      showToast("Employé retiré", 'success')
     }
     setConfirmDialog({ isOpen: false, item: null, type: '' });
   }
