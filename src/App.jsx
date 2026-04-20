@@ -611,13 +611,13 @@ function App() {
           {isAuthenticated && (
             <>
               <button 
-                className={`btn-icon ${isSyncing ? 'animate-spin' : ''}`} 
+                className="btn-icon" 
                 onClick={syncData} 
                 disabled={isSyncing}
                 style={{ color: isOnline ? 'var(--accent)' : 'var(--text-dim)' }}
                 title="Synchroniser avec le serveur"
               >
-                ☁️
+                <span className={isSyncing ? 'animate-spin' : ''} style={{ display: 'inline-block' }}>☁️</span>
               </button>
               <span className="user-badge">
                 <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>{currentUser?.email}</span>&nbsp;({currentUser?.role})

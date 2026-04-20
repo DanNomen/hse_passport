@@ -290,6 +290,15 @@ nav {
 @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 .animate-slide-up { animation: slideUp 0.5s ease-out forwards; }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin {
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
 /* Biometry */
 .fingerprint-container {
   display: flex;
