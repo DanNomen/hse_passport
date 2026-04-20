@@ -295,13 +295,13 @@ function App() {
 
     if (isProd) {
       try {
-        const res = await fetch(`${API_URL}/accounts`, {
-          method: 'POST',
+        const { CapacitorHttp } = await import('@capacitor/core')
+        const res = await CapacitorHttp.post({
+          url: `${API_URL}/accounts`,
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newAccountFormData)
+          data: newAccountFormData
         })
-        const data = await res.json()
-        if (!data.success) throw new Error()
+        if (res.status !== 200 || !res.data.success) throw new Error()
       } catch (err) {
         showToast("Erreur API", "danger");
         return;
@@ -323,7 +323,8 @@ function App() {
       const email = confirmDialog.item.email;
       if (isProd) {
         try {
-          await fetch(`${API_URL}/accounts/${email}`, { method: 'DELETE' })
+          const { CapacitorHttp } = await import('@capacitor/core')
+          await CapacitorHttp.delete({ url: `${API_URL}/accounts/${email}` })
         } catch (err) {
           showToast("Erreur API de suppression", "danger");
           setConfirmDialog({ isOpen: false, item: null, type: '' });
