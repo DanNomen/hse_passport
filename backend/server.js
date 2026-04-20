@@ -53,16 +53,18 @@ const initDB = async () => {
         status VARCHAR(50) NOT NULL,
         certifications JSONB NOT NULL DEFAULT '[]',
         avatar TEXT,
-        aptitude_medicale BOOLEAN DEFAULT true
+        aptitude_medicale BOOLEAN DEFAULT true,
+        epis JSONB NOT NULL DEFAULT '{}'
       );
     `);
     
     // Auto-migration (add column if missing)
     try {
       await pool.query('ALTER TABLE employees ADD COLUMN aptitude_medicale BOOLEAN DEFAULT true');
-    } catch(e) {
-      // Column already exists
-    }
+    } catch(e) {}
+    try {
+      await pool.query('ALTER TABLE employees ADD COLUMN epis JSONB DEFAULT \'{}\'');
+    } catch(e) {}
     
     // Inject default initial admin
     const adminCheck = await pool.query('SELECT * FROM accounts WHERE email = $1', ['admin@madagreen.com']);
@@ -146,7 +148,8 @@ app.get('/api/employees', async (req, res) => {
       ...r,
       firstName: r.first_name,
       lastName: r.last_name,
-      aptitudeMedicale: r.aptitude_medicale
+      aptitudeMedicale: r.aptitude_medicale,
+      epis: r.epis || {}
     }));
     res.json({ success: true, employees: formatted });
   } catch (err) {
@@ -162,15 +165,15 @@ app.post('/api/employees', async (req, res) => {
       // Update
       await pool.query(`
         UPDATE employees 
-        SET first_name=$1, last_name=$2, name=$3, role=$4, departement=$5, compliance=$6, status=$7, certifications=$8, avatar=$9, aptitude_medicale=$11
+        SET first_name=$1, last_name=$2, name=$3, role=$4, departement=$5, compliance=$6, status=$7, certifications=$8, avatar=$9, aptitude_medicale=$11, epis=$12
         WHERE matricule=$10
-      `, [emp.firstName, emp.lastName, emp.name, emp.role, emp.departement, emp.compliance, emp.status, JSON.stringify(emp.certifications), emp.avatar, emp.matricule, emp.aptitudeMedicale ?? true]);
+      `, [emp.firstName, emp.lastName, emp.name, emp.role, emp.departement, emp.compliance, emp.status, JSON.stringify(emp.certifications), emp.avatar, emp.matricule, emp.aptitudeMedicale ?? true, JSON.stringify(emp.epis || {})]);
     } else {
       // Insert
       await pool.query(`
-        INSERT INTO employees (matricule, first_name, last_name, name, role, departement, compliance, status, certifications, avatar, aptitude_medicale)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      `, [emp.matricule, emp.firstName, emp.lastName, emp.name, emp.role, emp.departement, emp.compliance, emp.status, JSON.stringify(emp.certifications), emp.avatar, emp.aptitudeMedicale ?? true]);
+        INSERT INTO employees (matricule, first_name, last_name, name, role, departement, compliance, status, certifications, avatar, aptitude_medicale, epis)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `, [emp.matricule, emp.firstName, emp.lastName, emp.name, emp.role, emp.departement, emp.compliance, emp.status, JSON.stringify(emp.certifications), emp.avatar, emp.aptitudeMedicale ?? true, JSON.stringify(emp.epis || {})]);
     }
     res.json({ success: true });
   } catch (err) {

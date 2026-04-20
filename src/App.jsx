@@ -11,9 +11,8 @@ import './index.css'
 import './App.css'
 
 // Constants
-const CERTIFICATION_LIST = [
-  "TH - Port Harnais", "HT - BT", "ATEX niv1",
-  "Secourisme", "Lutte contre l'incendie", "Sauvetage en Hauteur", "Verification echaffaudage"
+const CERTIFICATION_LIST = ["TH - Port Harnais", "HT - BT", "ATEX niv1",
+  "Secourisme", "Lutte contre l'incendie", "Sauvetage en Hauteur", "Verification echaffaudage", "Montage / Demontage Echaffaudage"
 ]
 
 const INITIAL_EMPLOYEES = []
@@ -21,6 +20,10 @@ const INITIAL_EMPLOYEES = []
 const INITIAL_ACCOUNTS = [
   { email: 'admin@madagreen.com', password: 'admin', role: 'Admin' },
   { email: 'visiteur@madagreen.com', password: 'visit', role: 'Visiteur' }
+]
+
+const PROJET_ACCOUNTS = [
+  { email: 'projet@madagreen.com', password: 'admin', role: 'Admin' }
 ]
 
 // Utilities
@@ -39,7 +42,7 @@ const getStatusLabel = (comp) => {
 }
 
 function App() {
-  const isProd = true
+  const isProd = true // <-- PASSÉ EN PRODUCTION
   const API_URL = 'http://46.105.75.234:3009/api'.trim()
   const DB_PREFIX = '_prod' // Stable prefix for mobile production
 
@@ -73,10 +76,12 @@ function App() {
   const [toasts, setToasts] = useState([])
 
   const [formData, setFormData] = useState({
-    firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true
+    firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true,
+    epis: { gants: { checked: false, date: '' }, chaussures: { checked: false, date: '' }, casques: { checked: false, date: '' }, uniforme: { checked: false, date: '' }, gillet: { checked: false, date: '' } }
   })
   const [draftCert, setDraftCert] = useState({ name: '', dateObtention: '', validite: '', dateExpiration: '' })
   const [newAccountFormData, setNewAccountFormData] = useState({ email: '', password: '', role: 'Visiteur' })
+  const [selectedHub, setSelectedHub] = useState(null)
 
   // Modal State
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, item: null, type: '' })
@@ -231,64 +236,6 @@ function App() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000)
   }
 
-  const [isBiometryAvailable, setIsBiometryAvailable] = useState(false)
-
-  // Vérifier la disponibilité de la biométrie
-  useEffect(() => {
-    const checkBiometry = async () => {
-      try {
-        const { NativeBiometric } = await import('@capgo/capacitor-native-biometric')
-        const result = await NativeBiometric.isAvailable()
-        setIsBiometryAvailable(result.isAvailable)
-      } catch (err) {
-        console.warn("Biométrie non supportée sur cet appareil")
-      }
-    }
-    checkBiometry()
-  }, [])
-
-  const handleBiometricLogin = async () => {
-    try {
-      const { NativeBiometric } = await import('@capgo/capacitor-native-biometric')
-
-      // FORCER l'affichage de la fenêtre d'empreinte
-      await NativeBiometric.verifyIdentity({
-        reason: "Accès sécurisé à HSE Passport",
-        title: "Vérification par empreinte",
-        subtitle: "Posez votre doigt pour continuer",
-        description: "Cette étape est requise pour votre sécurité.",
-        negativeButtonText: "Utiliser mot de passe"
-      })
-
-      // Si c'est validé, on récupère les identifiants
-      const credentials = await NativeBiometric.getCredentials({
-        server: "hse-passport.madagreen.com"
-      })
-
-      if (credentials) {
-        const uEmail = credentials.username.toLowerCase()
-        const uPassword = credentials.password
-
-        const all = [...accounts, ...INITIAL_ACCOUNTS]
-        const acc = all.find(a => a.email.toLowerCase() === uEmail && a.password === uPassword)
-
-        if (acc) {
-          setCurrentUser(acc)
-          setIsAuthenticated(true)
-          showToast(`Accès autorisé : ${acc.email}`)
-        } else {
-          showToast("Session expirée ou compte obsolète", "danger")
-        }
-      }
-    } catch (err) {
-      if (err.message.includes("No credentials")) {
-        showToast("Connectez-vous une fois avec mot de passe pour activer l'empreinte", "info")
-      } else if (err.message !== "User cancelled") {
-        showToast("Erreur Biométrique", "danger")
-      }
-    }
-  }
-
   const handleLogin = async (e) => {
     e.preventDefault()
     const emailInput = e.target.email.value.trim().toLowerCase()
@@ -297,22 +244,6 @@ function App() {
     const finalizeAuth = async (account) => {
       setCurrentUser(account)
       setIsAuthenticated(true)
-
-      if (isBiometryAvailable) {
-        if (window.confirm("Activer l'empreinte digitale pour ce compte ?")) {
-          try {
-            const { NativeBiometric } = await import('@capgo/capacitor-native-biometric')
-            await NativeBiometric.setCredentials({
-              username: emailInput,
-              password: passwordInput,
-              server: "hse-passport.madagreen.com"
-            })
-            showToast("Empreinte activée !")
-          } catch (err) {
-            console.error("Biometry error", err)
-          }
-        }
-      }
     }
 
     if (isProd) {
@@ -336,8 +267,8 @@ function App() {
         }
       }
 
-      const all = [...accounts, ...INITIAL_ACCOUNTS]
-      const acc = all.find(a => a.email.toLowerCase() === emailInput && a.password === passwordInput)
+      const scopeAccounts = selectedHub === 'projet' ? PROJET_ACCOUNTS : [...accounts, ...INITIAL_ACCOUNTS]
+      const acc = scopeAccounts.find(a => a.email.toLowerCase() === emailInput && a.password === passwordInput)
 
       if (acc) {
         finalizeAuth(acc)
@@ -345,7 +276,8 @@ function App() {
         showToast("Identifiants incorrects", "danger")
       }
     } else {
-      const acc = accounts.find(a => a.email === emailInput && a.password === passwordInput)
+      const scopeAccounts = selectedHub === 'projet' ? PROJET_ACCOUNTS : [...accounts, ...INITIAL_ACCOUNTS]
+      const acc = scopeAccounts.find(a => a.email.toLowerCase() === emailInput && a.password === passwordInput)
       if (acc) {
         finalizeAuth(acc)
       } else {
@@ -449,12 +381,22 @@ function App() {
 
     showToast(employeeView === 'edit' ? "Mise à jour locale réussie" : "Nouvel arrivant enregistré localement")
     setEmployeeView('list')
-    setFormData({ firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true })
+    setFormData({ firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true, epis: { gants: { checked: false, date: '' }, chaussures: { checked: false, date: '' }, casques: { checked: false, date: '' }, uniforme: { checked: false, date: '' }, gillet: { checked: false, date: '' } } })
   }
 
   const startEdit = (emp) => {
     setSelectedEmployee(emp)
-    setFormData({ ...emp, aptitudeMedicale: emp.aptitudeMedicale ?? true })
+    setFormData({
+      ...emp,
+      aptitudeMedicale: emp.aptitudeMedicale ?? true,
+      epis: {
+        gants: emp.epis?.gants || { checked: false, date: '' },
+        chaussures: emp.epis?.chaussures || { checked: false, date: '' },
+        casques: emp.epis?.casques || { checked: false, date: '' },
+        uniforme: emp.epis?.uniforme || { checked: false, date: '' },
+        gillet: emp.epis?.gillet || { checked: false, date: '' }
+      }
+    })
     setEmployeeView('edit')
   }
 
@@ -595,23 +537,34 @@ function App() {
 
           {isAuthenticated && (
             <>
-              <button
-                className="btn-icon"
-                onClick={syncData}
-                disabled={isSyncing}
-                style={{ color: isOnline ? 'var(--accent)' : 'var(--text-dim)' }}
-                title="Synchroniser avec le serveur"
-              >
-                <span className={isSyncing ? 'animate-spin' : ''} style={{ display: 'inline-block' }}>☁️</span>
-              </button>
-              <span className="user-badge">
-                <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>{currentUser?.email}</span>&nbsp;({currentUser?.role})
-              </span>
-              <button className={`btn-secondary nav-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => setEmployeeView('list')}>Employés</button>
-              {currentUser?.role === 'Admin' && (
-                <button className={`btn-secondary nav-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => setEmployeeView('settings')}>Paramètres</button>
+              {selectedHub === 'hse' ? (
+                <>
+                  <button
+                    className="btn-icon"
+                    onClick={syncData}
+                    disabled={isSyncing}
+                    style={{ color: isOnline ? 'var(--accent)' : 'var(--text-dim)' }}
+                    title="Synchroniser avec le serveur"
+                  >
+                    <span className={isSyncing ? 'animate-spin' : ''} style={{ display: 'inline-block' }}>☁️</span>
+                  </button>
+                  <span className="user-badge">
+                    <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>{currentUser?.email}</span>&nbsp;({currentUser?.role})
+                  </span>
+                  <button className={`btn-secondary nav-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => setEmployeeView('list')}>Employés</button>
+                  {currentUser?.role === 'Admin' && (
+                    <button className={`btn-secondary nav-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => setEmployeeView('settings')}>Paramètres</button>
+                  )}
+                  <button className={`btn-secondary nav-btn logout-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => { setIsAuthenticated(false); setCurrentUser(null); }}>Déconnexion</button>
+                </>
+              ) : (
+                <>
+                  <span className="user-badge" style={{ marginRight: '1rem' }}>
+                    <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>{currentUser?.email}</span>
+                  </span>
+                  <button className="btn-secondary nav-btn logout-btn" onClick={() => { setIsAuthenticated(false); setCurrentUser(null); }}>Déconnexion</button>
+                </>
               )}
-              <button className={`btn-secondary nav-btn logout-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => { setIsAuthenticated(false); setCurrentUser(null); }}>Déconnexion</button>
             </>
           )}
         </div>
@@ -671,62 +624,96 @@ function App() {
               borderLeft: '1px solid rgba(255,255,255,0.1)'
             }}>
               <div className="glass-panel" style={{ padding: '2.5rem', maxWidth: '420px', width: '100%', margin: '0 auto' }}>
-                <p style={{ color: 'var(--primary)', fontSize: '0.7rem', fontWeight: '700', letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Espace Sécurisé</p>
-                <h2 style={{ fontSize: '1.8rem', fontWeight: '800', marginBottom: '0.5rem' }}>Connexion</h2>
-                <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '2rem' }}>Identifiez-vous pour accéder au système.</p>
+                {!selectedHub ? (
+                  <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <p style={{ color: 'var(--primary)', fontSize: '0.7rem', fontWeight: '700', letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Portail Sécurisé</p>
+                    <h2 style={{ fontSize: '1.6rem', fontWeight: '800', marginBottom: '0.5rem' }}>Hub d'Applications</h2>
+                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '1.5rem', lineHeight: '1.5' }}>Veuillez sélectionner l'environnement auquel vous souhaitez accéder.</p>
 
-                <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-dim)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Adresse Email</label>
-                    <input
-                      type="email" name="email"
-                      placeholder="admin@madagreen.com"
-                      required
-                      style={{
-                        width: '100%', background: 'rgba(255,255,255,0.03)', border: 'none',
-                        borderBottom: '2px solid rgba(255,255,255,0.1)',
-                        color: 'white', fontSize: '1rem', padding: '0.8rem 0',
-                        outline: 'none', boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-dim)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Mot de passe</label>
-                    <input
-                      type="password" name="password"
-                      placeholder="••••••••"
-                      required
-                      style={{
-                        width: '100%', background: 'rgba(255,255,255,0.03)', border: 'none',
-                        borderBottom: '2px solid rgba(255,255,255,0.1)',
-                        color: 'white', fontSize: '1rem', padding: '0.8rem 0',
-                        outline: 'none', boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
-                  <button type="submit" className="btn-primary" style={{ marginTop: '1rem', width: '100%' }}>
-                    Se connecter →
-                  </button>
-
-                  {isBiometryAvailable && (
-                    <div className="fingerprint-container" onClick={handleBiometricLogin}>
-                      <div className="fingerprint-scanner">
-                        <div className="pulse-rings"></div>
-                        <div className="scan-line"></div>
-                        <svg className="fingerprint-svg" viewBox="0 0 448 512">
-                          <path d="M224 48c70.7 0 128 57.3 128 128s-57.3 128-128 128s-128-57.3-128-128s57.3-128 128-128zm89.6 128c0-49.5-40.1-89.6-89.6-89.6s-89.6 40.1-89.6 89.6s40.1 89.6 89.6 89.6s89.6-40.1 89.6-89.6zM224 0C100.3 0 0 100.3 0 224v240c0 26.5 21.5 48 48 48h352c26.5 0 48-21.5 48-48V224C448 100.3 347.7 0 224 0zM400 464H48V224c0-97.1 78.9-176 176-176s176 78.9 176 176v240z" />
-                        </svg>
+                    <button
+                      onClick={() => setSelectedHub('hse')}
+                      style={{ background: 'var(--card-bg-light)', border: '2px solid transparent', borderRadius: '12px', padding: '1.5rem', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.3s ease' }}
+                    >
+                      <div style={{ fontSize: '2rem' }}>🛡️</div>
+                      <div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: '800', color: 'white', marginBottom: '0.2rem' }}>HSE Passport</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Habilitations & Sécurité</div>
                       </div>
-                      <p className="biometry-text">Toucher pour scanner</p>
+                    </button>
+
+                    <button
+                      onClick={() => setSelectedHub('projet')}
+                      style={{ background: 'var(--card-bg-medium)', border: '2px solid transparent', borderRadius: '12px', padding: '1.5rem', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.3s ease' }}
+                    >
+                      <div style={{ fontSize: '2rem' }}>🏗️</div>
+                      <div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: '800', color: 'white', marginBottom: '0.2rem' }}>Gestion de Projet</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Suivi Chantier & Logistique</div>
+                      </div>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="animate-slide-up">
+                    <button onClick={() => setSelectedHub(null)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 0, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+                      <span>←</span> Retour au Hub
+                    </button>
+
+                    <div style={{ display: 'inline-block', background: selectedHub === 'hse' ? 'var(--accent-glow)' : 'rgba(59, 130, 246, 0.2)', color: selectedHub === 'hse' ? 'var(--accent)' : '#3b82f6', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 'bold', fontSize: '0.7rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '1rem' }}>
+                      {selectedHub === 'hse' ? '🛡️ Module HSE' : '🏗️ Module Projet'}
                     </div>
-                  )}
-                </form>
+
+                    <h2 style={{ fontSize: '1.8rem', fontWeight: '800', marginBottom: '0.5rem' }}>Connexion</h2>
+                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '2rem' }}>Identifiez-vous pour accéder au système.</p>
+
+                    <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-dim)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Adresse Email</label>
+                        <input
+                          type="email" name="email"
+                          placeholder="admin@madagreen.com"
+                          required
+                          style={{
+                            width: '100%', background: 'rgba(255,255,255,0.03)', border: 'none',
+                            borderBottom: '2px solid rgba(255,255,255,0.1)',
+                            color: 'white', fontSize: '1rem', padding: '0.8rem 0',
+                            outline: 'none', boxSizing: 'border-box'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-dim)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Mot de passe</label>
+                        <input
+                          type="password" name="password"
+                          placeholder="••••••••"
+                          required
+                          style={{
+                            width: '100%', background: 'rgba(255,255,255,0.03)', border: 'none',
+                            borderBottom: '2px solid rgba(255,255,255,0.1)',
+                            color: 'white', fontSize: '1rem', padding: '0.8rem 0',
+                            outline: 'none', boxSizing: 'border-box'
+                          }}
+                        />
+                      </div>
+                      <button type="submit" className="btn-primary" style={{ marginTop: '1rem', width: '100%', background: selectedHub === 'hse' ? 'var(--primary)' : '#3b82f6', justifyContent: 'center', borderColor: 'transparent' }}>
+                        Se connecter →
+                      </button>
+                    </form>
+                  </div>
+                )}
 
                 <p style={{ marginTop: '2.5rem', fontSize: '0.7rem', color: 'var(--text-dim)', textAlign: 'center' }}>
                   © {new Date().getFullYear()} Madagreen Power — Tous droits réservés
                 </p>
               </div>
             </div>
+          </div>
+        ) : selectedHub === 'projet' ? (
+          <div className="animate-fade-in" style={{ padding: '4rem 2rem', textAlign: 'center', marginTop: '10vh' }}>
+            <div style={{ fontSize: '5rem', marginBottom: '1.5rem' }}>🏗️</div>
+            <h1 style={{ fontSize: '3rem', marginBottom: '1rem' }}>Gestion de Projet</h1>
+            <p style={{ color: 'var(--text-dim)', fontSize: '1.2rem', maxWidth: '600px', margin: '0 auto' }}>
+              Cet espace est un module indépendant de HSE Passport. L'interface de suivi logistique et de chantier est actuellement en cours de développement.
+            </p>
           </div>
         ) : (
           <div className="animate-fade-in">
@@ -884,10 +871,10 @@ function App() {
                   </div>
 
                   <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: '1.5rem', background: 'var(--card-bg-light)', padding: '1.5rem', borderRadius: '12px', borderLeft: formData.aptitudeMedicale ? '4px solid var(--accent)' : '4px solid var(--danger)' }}>
-                    <input 
-                      type="checkbox" 
-                      id="aptitudeMedicale" 
-                      checked={formData.aptitudeMedicale} 
+                    <input
+                      type="checkbox"
+                      id="aptitudeMedicale"
+                      checked={formData.aptitudeMedicale}
                       onChange={e => setFormData({ ...formData, aptitudeMedicale: e.target.checked })}
                       style={{ width: '28px', height: '28px', cursor: 'pointer' }}
                     />
@@ -900,6 +887,41 @@ function App() {
                   </div>
 
                   <div style={{ gridColumn: 'span 2', marginTop: '2rem' }}>
+                    <h3 style={{ marginBottom: '1.5rem', fontSize: '1.1rem', color: 'var(--primary)' }}>EPI (Équipement de Protection Individuelle)</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                      {[
+                        { key: 'gants', label: 'Gants' },
+                        { key: 'chaussures', label: 'Chaussures de sécurité' },
+                        { key: 'casques', label: 'Casques' },
+                        { key: 'uniforme', label: 'Uniforme manche longue' },
+                        { key: 'gillet', label: 'Gillet Cotton' }
+                      ].map(({ key, label }) => (
+                        <div key={key} style={{ background: 'var(--card-bg-light)', padding: '1rem', borderRadius: '12px', borderLeft: formData.epis[key].checked ? '4px solid var(--accent)' : '4px solid var(--border)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: formData.epis[key].checked ? '0.75rem' : '0' }}>
+                            <input
+                              type="checkbox"
+                              checked={formData.epis[key].checked}
+                              onChange={e => setFormData(pr => ({ ...pr, epis: { ...pr.epis, [key]: { ...pr.epis[key], checked: e.target.checked } } }))}
+                              style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                            />
+                            <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{label}</span>
+                          </div>
+                          {formData.epis[key].checked && (
+                            <div className="animate-fade-in">
+                              <label className="input-label" style={{ fontSize: '0.75rem' }}>Date de dotation</label>
+                              <input
+                                type="date"
+                                className="glass-input"
+                                value={formData.epis[key].date}
+                                onChange={e => setFormData(pr => ({ ...pr, epis: { ...pr.epis, [key]: { ...pr.epis[key], date: e.target.value } } }))}
+                                style={{ padding: '0.5rem', fontSize: '0.85rem' }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
                     <h3 style={{ marginBottom: '1.5rem', fontSize: '1.1rem', color: 'var(--primary)' }}>Habilitations HSE</h3>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.5rem' }}>
                       {formData.certifications.map((c, i) => (
@@ -1021,6 +1043,31 @@ function App() {
                     </div>
                   </div>
 
+                  <div className="glass-panel" style={{ padding: '2rem' }}>
+                    <h3 style={{ fontSize: '1rem', marginBottom: '1.5rem' }}>EPI Fournis</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {[
+                        { key: 'gants', label: 'Gants' },
+                        { key: 'chaussures', label: 'Chaussures Sécu' },
+                        { key: 'casques', label: 'Casque' },
+                        { key: 'uniforme', label: 'Uniforme Manche L.' },
+                        { key: 'gillet', label: 'Gillet Cotton' }
+                      ].map(({ key, label }) => {
+                        const epiData = selectedEmployee.epis?.[key] || { checked: false, date: '' };
+                        return (
+                          <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <span style={{ color: epiData.checked ? 'var(--text-main)' : 'var(--text-dim)', fontWeight: epiData.checked ? 'bold' : 'normal' }}>{label}</span>
+                            {epiData.checked ? (
+                              <span style={{ fontSize: '0.8rem', color: 'var(--accent)', background: 'var(--accent-glow)', padding: '2px 8px', borderRadius: '4px' }}>{epiData.date ? epiData.date : 'Doté'}</span>
+                            ) : (
+                              <span style={{ fontSize: '0.8rem', color: 'var(--danger)', opacity: 0.5 }}>NON</span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
                   <div style={{ position: 'fixed', left: '-100vw', top: 0, opacity: 0, pointerEvents: 'none' }}>
                     <div id="pdf-badge-wrapper" style={{ padding: '40px', background: 'white', display: 'flex', flexDirection: 'column', gap: '40px' }}>
 
@@ -1076,7 +1123,7 @@ function App() {
                           HABILITATIONS & APTITUDES
                         </div>
                         <div style={{ flex: 1, padding: '5mm', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: '1' }}>
-                          
+
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: selectedEmployee.aptitudeMedicale !== false ? '#10b981' : '#f43f5e', color: 'white', padding: '5px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', marginBottom: '15px' }}>
                             <span>Aptitude Médicale</span>
                             <span>{selectedEmployee.aptitudeMedicale !== false ? 'APTE' : 'INAPTE'}</span>
