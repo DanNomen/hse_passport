@@ -608,7 +608,7 @@ function App() {
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
 
-          <a href="/hse-passport.apk" download className="btn-icon mobile-hide" title="Télécharger l'application mobile" style={{ color: 'var(--primary)' }}>
+          <a href="/hse-passport.apk" download="hse-passport.apk" className="btn-icon mobile-hide" title="Télécharger l'application mobile" style={{ color: 'var(--primary)' }}>
             📱
           </a>
 
@@ -672,7 +672,7 @@ function App() {
                 <p style={{ color: 'var(--accent)', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>
                   Disponible sur Android
                 </p>
-                <a href="/hse-passport.apk" download className="app-download-btn">
+                <a href="/hse-passport.apk" download="hse-passport.apk" className="app-download-btn">
                   <div className="app-download-icon">🤖</div>
                   <div style={{ textAlign: 'left' }}>
                     <div style={{ fontSize: '0.6rem', opacity: 0.8, textTransform: 'uppercase' }}>Télécharger</div>
