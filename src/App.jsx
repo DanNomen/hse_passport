@@ -82,6 +82,7 @@ function App() {
   const [draftCert, setDraftCert] = useState({ name: '', dateObtention: '', validite: '', dateExpiration: '' })
   const [newAccountFormData, setNewAccountFormData] = useState({ email: '', password: '', role: 'Visiteur' })
   const [selectedHub, setSelectedHub] = useState(null)
+  const [projetView, setProjetView] = useState('projet')
 
   // Modal State
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, item: null, type: '' })
@@ -562,7 +563,12 @@ function App() {
                 </>
               ) : (
                 <>
-                  <span className="user-badge" style={{ marginRight: '1rem' }}>
+                  <button className={`btn-secondary nav-btn`} style={{ color: projetView === 'projet' ? '#3b82f6' : '' }} onClick={() => setProjetView('projet')}>Projet</button>
+                  <button className={`btn-secondary nav-btn`} style={{ color: projetView === 'materiels' ? '#3b82f6' : '' }} onClick={() => setProjetView('materiels')}>Matériels</button>
+                  {currentUser?.role === 'Admin' && (
+                    <button className={`btn-secondary nav-btn`} style={{ color: projetView === 'parametres' ? '#3b82f6' : '' }} onClick={() => setProjetView('parametres')}>Paramètres</button>
+                  )}
+                  <span className="user-badge mobile-hide">
                     <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>{currentUser?.email}</span>
                   </span>
                   <button className="btn-secondary nav-btn logout-btn" onClick={() => { setIsAuthenticated(false); setCurrentUser(null); setSelectedHub(null); }}>Déconnexion</button>
@@ -711,12 +717,10 @@ function App() {
             </div>
           </div>
         ) : selectedHub === 'projet' ? (
-          <div className="animate-fade-in" style={{ padding: '4rem 2rem', textAlign: 'center', marginTop: '10vh' }}>
-            <div style={{ fontSize: '5rem', marginBottom: '1.5rem' }}>🏗️</div>
-            <h1 style={{ fontSize: '3rem', marginBottom: '1rem' }}>Gestion de Projet</h1>
-            <p style={{ color: 'var(--text-dim)', fontSize: '1.2rem', maxWidth: '600px', margin: '0 auto' }}>
-              Cet espace est un module indépendant de HSE Passport. L'interface de suivi logistique et de chantier est actuellement en cours de développement.
-            </p>
+          <div className="animate-fade-in">
+            {projetView === 'projet' && (<div></div>)}
+            {projetView === 'materiels' && (<div></div>)}
+            {projetView === 'parametres' && (<div></div>)}
           </div>
         ) : (
           <div className="animate-fade-in">
