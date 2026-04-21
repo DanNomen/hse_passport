@@ -97,9 +97,9 @@ function App() {
     const saved = localStorage.getItem('gp_projets_v1')
     return saved ? JSON.parse(saved) : []
   })
-  const [projetFormData, setProjetFormData] = useState({ 
-    nomChantier: '', lieu: '', dateDebut: '', outillageCaisse: '', responsableChantier: '', 
-    epc: { ...INITIAL_EPC } 
+  const [projetFormData, setProjetFormData] = useState({
+    nomChantier: '', lieu: '', dateDebut: '', outillageCaisse: '', responsableChantier: '',
+    epc: { ...INITIAL_EPC }
   })
   const [projetWizardStep, setProjetWizardStep] = useState(1)
   const [projetIntervenants, setProjetIntervenants] = useState([])
@@ -170,7 +170,7 @@ function App() {
       }
     }
     fetchInitialData()
-  }, [isProd, isAuthenticated])
+  }, [isProd, isAuthenticated, API_URL, DB_PREFIX])
 
 
   useEffect(() => {
@@ -374,7 +374,6 @@ function App() {
   }
 
   const handleAccountDelete = async (email) => {
-    // Will be handled via modal, just a safety hook if called directly
     setConfirmDialog({ isOpen: true, item: { email }, type: 'account' });
   }
 
@@ -410,7 +409,7 @@ function App() {
       setEmployees(updatedEmployees)
       localStorage.setItem(`hse_employees_v2${DB_PREFIX}`, JSON.stringify(updatedEmployees))
       showToast("Employé retiré", 'success')
-      
+
       // Auto-sync after delete to refresh everyone else (if possible)
       syncData()
     }
@@ -462,7 +461,7 @@ function App() {
   }
 
   const resetProjetForm = () => {
-    setProjetFormData({ 
+    setProjetFormData({
       nomChantier: '', lieu: '', dateDebut: '', outillageCaisse: '', responsableChantier: '',
       epc: { ...INITIAL_EPC }
     })
@@ -582,7 +581,7 @@ function App() {
     <div className="glass-card employee-row animate-slide-up" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', background: 'var(--card-bg-light)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
         <div style={{ width: '50px', height: '50px', borderRadius: '14px', background: 'var(--primary)', padding: '2px' }}>
-          <img src={emp.avatar || avatarPlaceholder} style={{ width: '100%', height: '100%', borderRadius: '12px', objectFit: 'cover' }} />
+          <img src={emp.avatar || avatarPlaceholder} style={{ width: '100%', height: '100%', borderRadius: '12px', objectFit: 'cover' }} alt="Avatar" />
         </div>
         <div>
           <h4 style={{ fontSize: '1.1rem', fontWeight: '700' }}>{emp.lastName?.toUpperCase()} {emp.firstName}</h4>
@@ -641,10 +640,10 @@ function App() {
                   {currentUser?.role === 'Admin' && (
                     <button className={`btn-secondary nav-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => setEmployeeView('settings')}>Paramètres</button>
                   )}
-                  <button className={`btn-secondary nav-btn logout-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => { 
-                    setIsAuthenticated(false); 
-                    setCurrentUser(null); 
-                    setSelectedHub(null); 
+                  <button className={`btn-secondary nav-btn logout-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => {
+                    setIsAuthenticated(false);
+                    setCurrentUser(null);
+                    setSelectedHub(null);
                     localStorage.removeItem('hse_isAuthenticated');
                     localStorage.removeItem('hse_currentUser');
                     localStorage.removeItem('hse_selectedHub');
@@ -669,10 +668,10 @@ function App() {
                   <span className="user-badge mobile-hide">
                     <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>{currentUser?.email}</span>
                   </span>
-                  <button className="btn-secondary nav-btn logout-btn" onClick={() => { 
-                    setIsAuthenticated(false); 
-                    setCurrentUser(null); 
-                    setSelectedHub(null); 
+                  <button className="btn-secondary nav-btn logout-btn" onClick={() => {
+                    setIsAuthenticated(false);
+                    setCurrentUser(null);
+                    setSelectedHub(null);
                     localStorage.removeItem('hse_isAuthenticated');
                     localStorage.removeItem('hse_currentUser');
                     localStorage.removeItem('hse_selectedHub');
@@ -710,7 +709,7 @@ function App() {
               minHeight: '40vh'
             }}>
               <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3rem)', fontWeight: '900', lineHeight: 1.1, marginBottom: '0.5rem', color: '#fff' }}>
-                HSE Passport
+                HSE Safety Tools
               </h1>
               <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.9rem', maxWidth: '380px', lineHeight: 1.5 }}>
                 Plateforme de gestion des habilitations et certifications sécurité pour Madagreen Power.
@@ -850,10 +849,10 @@ function App() {
                           </div>
                           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                             <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }} onClick={() => {
-                              setProjetFormData({ 
-                                nomChantier: p.nomChantier, 
-                                lieu: p.lieu, 
-                                dateDebut: p.dateDebut, 
+                              setProjetFormData({
+                                nomChantier: p.nomChantier,
+                                lieu: p.lieu,
+                                dateDebut: p.dateDebut,
                                 outillageCaisse: p.outillageCaisse || '',
                                 responsableChantier: p.responsableChantier || '',
                                 epc: p.epc || { ...INITIAL_EPC }
@@ -863,10 +862,10 @@ function App() {
                               setSelectedProjetIndex(i)
                             }}>Détails</button>
                             <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }} onClick={() => {
-                              setProjetFormData({ 
-                                nomChantier: p.nomChantier, 
-                                lieu: p.lieu, 
-                                dateDebut: p.dateDebut, 
+                              setProjetFormData({
+                                nomChantier: p.nomChantier,
+                                lieu: p.lieu,
+                                dateDebut: p.dateDebut,
                                 outillageCaisse: p.outillageCaisse || '',
                                 responsableChantier: p.responsableChantier || '',
                                 epc: p.epc || { ...INITIAL_EPC }
@@ -877,17 +876,17 @@ function App() {
                               setProjetView('editProjet')
                             }}>Modifier</button>
                             <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', color: 'var(--danger)' }} onClick={async () => {
-                                if (isProd && isOnline) {
-                                  try {
-                                    const { CapacitorHttp } = await import('@capacitor/core')
-                                    await CapacitorHttp.delete({ url: `${API_URL}/projets/${p.nomChantier}` })
-                                  } catch (e) {}
-                                }
-                                const updated = projets.filter((_, idx) => idx !== i)
-                                setProjets(updated)
-                                localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
-                                showToast('Projet supprimé')
-                              }}>Supprimer</button>
+                              if (isProd && isOnline) {
+                                try {
+                                  const { CapacitorHttp } = await import('@capacitor/core')
+                                  await CapacitorHttp.delete({ url: `${API_URL}/projets/${p.nomChantier}` })
+                                } catch (e) { }
+                              }
+                              const updated = projets.filter((_, idx) => idx !== i)
+                              setProjets(updated)
+                              localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
+                              showToast('Projet supprimé')
+                            }}>Supprimer</button>
                           </div>
                         </div>
                       </div>
@@ -899,11 +898,18 @@ function App() {
             {projetView === 'addProjet' && (
               <div className="glass-panel animate-slide-up" style={{ maxWidth: '600px', margin: '0 auto', padding: '3rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1.5rem' }}>
-                  <button className="btn-icon" onClick={() => { if (projetWizardStep === 2) { setProjetWizardStep(1) } else { setProjetView('projet'); setProjetWizardStep(1); setProjetIntervenants([]) } }}>←</button>
+                  <button className="btn-icon" onClick={() => {
+                    if (projetWizardStep > 1) {
+                      setProjetWizardStep(projetWizardStep - 1)
+                    } else {
+                      setProjetView('projet');
+                      resetProjetForm();
+                      setProjetIntervenants([]);
+                    }
+                  }}>←</button>
                   <h2>Nouveau Projet</h2>
                 </div>
 
-                {/* Step indicator */}
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem' }}>
                   <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: 'var(--primary)' }}></div>
                   <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: projetWizardStep >= 2 ? 'var(--primary)' : 'rgba(255,255,255,0.1)' }}></div>
@@ -912,7 +918,7 @@ function App() {
 
                 {projetWizardStep === 1 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Étape 1/2 — Informations du chantier</p>
+                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Étape 1/3 — Informations du projet</p>
                     <div>
                       <label className="input-label">Nom du Chantier</label>
                       <input type="text" className="glass-input" placeholder="Ex: Chantier Toamasina" value={projetFormData.nomChantier} onChange={e => setProjetFormData({ ...projetFormData, nomChantier: e.target.value })} />
@@ -925,34 +931,7 @@ function App() {
                       <label className="input-label">Date de début</label>
                       <input type="date" className="glass-input" value={projetFormData.dateDebut} onChange={e => setProjetFormData({ ...projetFormData, dateDebut: e.target.value })} />
                     </div>
-                    <div>
-                      <label className="input-label">Responsable Chantier (HSE Passport)</label>
-                      <select 
-                        className="glass-input" 
-                        value={projetFormData.responsableChantier} 
-                        onChange={e => setProjetFormData({ ...projetFormData, responsableChantier: e.target.value })}
-                      >
-                        <option value="">Sélectionner un responsable...</option>
-                        {employees.map(emp => (
-                          <option key={emp.matricule} value={emp.name}>{emp.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="input-label">Outillage (Sélection Caisse)</label>
-                      <select 
-                        className="glass-input" 
-                        value={projetFormData.outillageCaisse} 
-                        onChange={e => setProjetFormData({ ...projetFormData, outillageCaisse: e.target.value })}
-                      >
-                        <option value="">Aucune caisse assignée...</option>
-                        {caisses.map(c => (
-                          <option key={c.numeroCaisse} value={c.numeroCaisse}>
-                            {c.numeroCaisse} — {c.affecterA}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+
                     <button
                       type="button"
                       className="btn-primary"
@@ -965,99 +944,122 @@ function App() {
 
                 {projetWizardStep === 2 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Étape 2/2 — Sélection des intervenants</p>
-
-                    {projetIntervenants.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        {projetIntervenants.map((intv, i) => (
-                          <span key={i} style={{ background: 'var(--primary-glow)', color: 'var(--primary)', padding: '0.3rem 0.8rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                            {intv.name}
-                            <span style={{ cursor: 'pointer', opacity: 0.7 }} onClick={() => setProjetIntervenants(prev => prev.filter((_, idx) => idx !== i))}>✕</span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Étape 2/3 — Responsable et Intervenants</p>
 
                     <div>
-                      <label className="input-label">Rechercher un employé</label>
-                      <input type="text" className="glass-input" placeholder="Tapez un nom ou matricule..." value={intervenantSearch} onChange={e => setIntervenantSearch(e.target.value)} />
+                      <label className="input-label">Responsable Chantier (HSE Passport)</label>
+                      <select
+                        className="glass-input"
+                        value={projetFormData.responsableChantier}
+                        onChange={e => setProjetFormData({ ...projetFormData, responsableChantier: e.target.value })}
+                      >
+                        <option value="">Sélectionner le responsable du chantier...</option>
+                        {employees.map(emp => (
+                          <option key={emp.matricule} value={emp.name}>{emp.name}</option>
+                        ))}
+                      </select>
                     </div>
 
-                    {intervenantSearch.trim().length > 0 && (
-                      <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        {(() => {
-                          const filtered = employees
-                            .filter(emp => !projetIntervenants.some(intv => intv.matricule === emp.matricule))
-                            .filter(emp => emp.name.toLowerCase().includes(intervenantSearch.toLowerCase()) || emp.matricule.toLowerCase().includes(intervenantSearch.toLowerCase()))
-                          return filtered.length === 0 ? (
-                            <p style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '1rem', fontSize: '0.85rem' }}>Aucun résultat trouvé.</p>
-                          ) : (
-                            filtered.map(emp => (
-                              <div
-                                key={emp.matricule}
-                                onClick={() => { setProjetIntervenants(prev => [...prev, { matricule: emp.matricule, name: emp.name, role: emp.role }]); setIntervenantSearch('') }}
-                                style={{ padding: '0.8rem 1rem', background: 'var(--card-bg-light)', borderRadius: '10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.2s' }}
-                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'var(--card-bg-light)'}
-                              >
-                                <div>
-                                  <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{emp.name}</div>
-                                  <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>{emp.role} — {emp.matricule}</div>
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+                      <label className="input-label">Liste des Intervenants ({projetIntervenants.length})</label>
+                      {projetIntervenants.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+                          {projetIntervenants.map((intv, i) => (
+                            <span key={i} style={{ background: 'var(--primary-glow)', color: 'var(--primary)', padding: '0.3rem 0.8rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              {intv.name}
+                              <span style={{ cursor: 'pointer', opacity: 0.7 }} onClick={() => setProjetIntervenants(prev => prev.filter((_, idx) => idx !== i))}>✕</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div style={{ position: 'relative' }}>
+                        <input type="text" className="glass-input" placeholder="Ajouter des intervenants..." value={intervenantSearch} onChange={e => setIntervenantSearch(e.target.value)} />
+                        {intervenantSearch.trim().length > 0 && (
+                          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, background: 'var(--bg-deep)', border: '1px solid var(--glass-border)', borderRadius: '12px', marginTop: '5px', maxHeight: '200px', overflowY: 'auto', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
+                            {employees
+                              .filter(emp => !projetIntervenants.some(intv => intv.matricule === emp.matricule))
+                              .filter(emp => emp.name.toLowerCase().includes(intervenantSearch.toLowerCase()) || emp.matricule.toLowerCase().includes(intervenantSearch.toLowerCase()))
+                              .map(emp => (
+                                <div
+                                  key={emp.matricule}
+                                  onClick={() => { setProjetIntervenants(prev => [...prev, { matricule: emp.matricule, name: emp.name, role: emp.role }]); setIntervenantSearch('') }}
+                                  style={{ padding: '0.8rem 1rem', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+                                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                >
+                                  <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{emp.name}</div>
+                                  <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>{emp.role}</div>
                                 </div>
-                                <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>+ Ajouter</span>
-                              </div>
-                            ))
-                          )
-                        })()}
+                              ))
+                            }
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
 
                     <button
                       type="button"
                       className="btn-primary"
                       style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }}
+                      disabled={!projetFormData.responsableChantier}
                       onClick={() => setProjetWizardStep(3)}
-                    >Suivant →</button>
+                    >Suivant (Matériels) →</button>
                   </div>
                 )}
 
                 {projetWizardStep === 3 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Étape 3/3 — Check-list EPC (Protection Collective)</p>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                      {[
-                        { key: 'extincteurs', label: 'Extincteurs' },
-                        { key: 'balisage', label: 'Balisage / Signalisation' },
-                        { key: 'echafaudage', label: 'Échafaudage' },
-                        { key: 'gardecorps', label: 'Garde-corps / Protections' },
-                        { key: 'lignedevie', label: 'Lignes de vie' },
-                        { key: 'eclairage', label: 'Éclairage de zone' },
-                        { key: 'kitantipollution', label: 'Kit Anti-pollution' }
-                      ].map(({ key, label }) => (
-                        <div 
-                          key={key} 
-                          onClick={() => setProjetFormData({ ...projetFormData, epc: { ...projetFormData.epc, [key]: !projetFormData.epc[key] } })}
-                          style={{ 
-                            background: 'var(--card-bg-light)', 
-                            padding: '1rem', 
-                            borderRadius: '12px', 
-                            cursor: 'pointer',
-                            borderLeft: projetFormData.epc[key] ? '4px solid var(--accent)' : '4px solid var(--border)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.75rem',
-                            transition: 'all 0.3s'
-                          }}
-                        >
-                          <input 
-                            type="checkbox" 
-                            checked={projetFormData.epc[key]} 
-                            onChange={() => {}} // Controlled by div click
-                            style={{ width: '18px', height: '18px' }}
-                          />
-                          <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{label}</span>
-                        </div>
-                      ))}
+                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Étape 3/3 — Matériels et Equipements</p>
+
+                    <div>
+                      <label className="input-label">Outillage (Sélection Caisse)</label>
+                      <select
+                        className="glass-input"
+                        value={projetFormData.outillageCaisse}
+                        onChange={e => setProjetFormData({ ...projetFormData, outillageCaisse: e.target.value })}
+                      >
+                        <option value="">Aucune caisse assignée...</option>
+                        {caisses.map(c => (
+                          <option key={c.numeroCaisse} value={c.numeroCaisse}>
+                            {c.numeroCaisse} — {c.affecterA}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+                      <label className="input-label">Check-list EPC (Facultatif)</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
+                        {[
+                          { key: 'extincteurs', label: 'Extincteurs' },
+                          { key: 'balisage', label: 'Balisage' },
+                          { key: 'echafaudage', label: 'Échafaudage' },
+                          { key: 'gardecorps', label: 'Garde-corps' },
+                          { key: 'lignedevie', label: 'Lignes de vie' },
+                          { key: 'eclairage', label: 'Éclairage' },
+                          { key: 'kitantipollution', label: 'Anti-pollution' }
+                        ].map(({ key, label }) => (
+                          <div
+                            key={key}
+                            onClick={() => setProjetFormData({ ...projetFormData, epc: { ...projetFormData.epc, [key]: !projetFormData.epc[key] } })}
+                            style={{
+                              background: 'var(--card-bg-light)',
+                              padding: '0.75rem',
+                              borderRadius: '10px',
+                              cursor: 'pointer',
+                              border: projetFormData.epc[key] ? '1px solid var(--accent)' : '1px solid transparent',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.5rem',
+                              transition: 'all 0.3s'
+                            }}
+                          >
+                            <input type="checkbox" checked={projetFormData.epc[key] || false} onChange={() => { }} style={{ width: '16px', height: '16px' }} />
+                            <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>{label}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
 
                     <button
@@ -1070,14 +1072,12 @@ function App() {
                         if (manager && !finalIntervenants.some(i => i.matricule === manager.matricule)) {
                           finalIntervenants.push({ matricule: manager.matricule, name: manager.name, role: manager.role });
                         }
-                        const newProjet = { 
-                          ...projetFormData, 
-                          intervenants: finalIntervenants, 
-                          responsableChantier: projetFormData.responsableChantier,
-                          outillageCaisse: projetFormData.outillageCaisse, 
-                          dateCreation: new Date().toLocaleDateString('fr-FR') 
+                        const newProjet = {
+                          ...projetFormData,
+                          intervenants: finalIntervenants,
+                          dateCreation: new Date().toLocaleDateString('fr-FR')
                         }
-                        
+
                         if (isProd && isOnline) {
                           const saveProj = async () => {
                             try {
@@ -1087,11 +1087,11 @@ function App() {
                                 headers: { 'Content-Type': 'application/json' },
                                 data: newProjet
                               })
-                            } catch (e) {}
+                            } catch (e) { }
                           }
                           saveProj()
                         }
-                        
+
                         const updated = [newProjet, ...projets]
                         setProjets(updated)
                         localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
@@ -1099,11 +1099,12 @@ function App() {
                         setProjetView('projet')
                         showToast('Projet enregistré avec succès')
                       }}
-                    >Enregistrer le Projet</button>
+                    >Finaliser et Créer le Projet</button>
                   </div>
                 )}
               </div>
             )}
+
             {projetView === 'materiels' && (
               <div className="animate-fade-in">
                 <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
@@ -1134,7 +1135,7 @@ function App() {
                               try {
                                 const { CapacitorHttp } = await import('@capacitor/core')
                                 await CapacitorHttp.delete({ url: `${API_URL}/caisses/${c.numeroCaisse}` })
-                              } catch (e) {}
+                              } catch (e) { }
                             }
                             const updated = caisses.filter((_, idx) => idx !== i);
                             setCaisses(updated);
@@ -1157,7 +1158,7 @@ function App() {
                         </div>
                         <button className="btn-secondary" style={{ width: '100%', marginTop: '1.5rem', fontSize: '0.8rem' }} onClick={() => {
                           setCaisseFormData(c);
-                          setSelectedProjetIndex(i); // Reusing this index for caisse
+                          setSelectedProjetIndex(i);
                           setProjetView('detailCaisse');
                         }}>Détails complets</button>
                       </div>
@@ -1177,20 +1178,20 @@ function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                   <div>
                     <label className="input-label">Numéro du Caisse</label>
-                    <input 
-                      type="text" 
-                      className="glass-input" 
-                      placeholder="Ex: CAI-001" 
-                      value={caisseFormData.numeroCaisse} 
-                      onChange={e => setCaisseFormData({ ...caisseFormData, numeroCaisse: e.target.value })} 
+                    <input
+                      type="text"
+                      className="glass-input"
+                      placeholder="Ex: CAI-001"
+                      value={caisseFormData.numeroCaisse}
+                      onChange={e => setCaisseFormData({ ...caisseFormData, numeroCaisse: e.target.value })}
                     />
                   </div>
 
                   <div>
                     <label className="input-label">Affecter à (HSE Passport)</label>
-                    <select 
-                      className="glass-input" 
-                      value={caisseFormData.affecterA} 
+                    <select
+                      className="glass-input"
+                      value={caisseFormData.affecterA}
                       onChange={e => setCaisseFormData({ ...caisseFormData, affecterA: e.target.value })}
                     >
                       <option value="">Sélectionner un collaborateur...</option>
@@ -1203,13 +1204,13 @@ function App() {
                   <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem' }}>
                     <label className="input-label">Liste des matériels</label>
                     <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                      <input 
-                        type="text" 
-                        className="glass-input" 
-                        placeholder="Ajouter un outil..." 
-                        value={newMateriel} 
+                      <input
+                        type="text"
+                        className="glass-input"
+                        placeholder="Ajouter un outil..."
+                        value={newMateriel}
                         onChange={e => setNewMateriel(e.target.value)}
-                        onKeyPress={e => e.key === 'Enter' && (e.preventDefault(), setNewMateriel(''), setCaisseFormData({...caisseFormData, materiels: [...caisseFormData.materiels, newMateriel]}))}
+                        onKeyPress={e => e.key === 'Enter' && (e.preventDefault(), setNewMateriel(''), setCaisseFormData({ ...caisseFormData, materiels: [...caisseFormData.materiels, newMateriel] }))}
                       />
                       <button className="btn-primary" onClick={() => {
                         if (newMateriel.trim()) {
@@ -1229,8 +1230,8 @@ function App() {
                     </div>
                   </div>
 
-                  <button 
-                    className="btn-primary" 
+                  <button
+                    className="btn-primary"
                     style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }}
                     disabled={!caisseFormData.numeroCaisse}
                     onClick={async () => {
@@ -1242,7 +1243,7 @@ function App() {
                             headers: { 'Content-Type': 'application/json' },
                             data: caisseFormData
                           })
-                        } catch (e) {}
+                        } catch (e) { }
                       }
                       const updated = [caisseFormData, ...caisses];
                       setCaisses(updated);
@@ -1295,7 +1296,7 @@ function App() {
                       )}
                     </div>
                   </div>
-                  
+
                   <button className="btn-secondary" style={{ width: '100%', marginTop: '1rem' }} onClick={() => {
                     if (previousView === 'detailProjet') {
                       setProjetView('detailProjet');
@@ -1307,9 +1308,7 @@ function App() {
                 </div>
               </div>
             )}
-            {projetView === 'parametres' && (<div></div>)}
 
-            {/* Détails d'un projet */}
             {projetView === 'detailProjet' && selectedProjetIndex !== null && (
               <div className="glass-panel animate-slide-up" style={{ maxWidth: '600px', margin: '0 auto', padding: '3rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem' }}>
@@ -1327,8 +1326,8 @@ function App() {
                       <div style={{ fontSize: '1.5rem' }}>📦</div>
                       <div>
                         {projetFormData.outillageCaisse ? (
-                          <div 
-                            style={{ cursor: 'pointer' }} 
+                          <div
+                            style={{ cursor: 'pointer' }}
                             onClick={() => {
                               const caisse = caisses.find(c => c.numeroCaisse === projetFormData.outillageCaisse);
                               if (caisse) {
@@ -1394,11 +1393,17 @@ function App() {
               </div>
             )}
 
-            {/* Modifier un projet */}
             {projetView === 'editProjet' && selectedProjetIndex !== null && (
               <div className="glass-panel animate-slide-up" style={{ maxWidth: '600px', margin: '0 auto', padding: '3rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1.5rem' }}>
-                  <button className="btn-icon" onClick={() => { if (projetWizardStep > 1) { setProjetWizardStep(projetWizardStep - 1) } else { setProjetView('projet') } }}>←</button>
+                  <button className="btn-icon" onClick={() => {
+                    if (projetWizardStep > 1) {
+                      setProjetWizardStep(projetWizardStep - 1)
+                    } else {
+                      setProjetView('projet');
+                      setProjetWizardStep(1);
+                    }
+                  }}>{"<"}</button>
                   <h2>Modifier le Projet</h2>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem' }}>
@@ -1406,107 +1411,78 @@ function App() {
                   <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: projetWizardStep >= 2 ? 'var(--primary)' : 'rgba(255,255,255,0.1)' }}></div>
                   <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: projetWizardStep >= 3 ? 'var(--primary)' : 'rgba(255,255,255,0.1)' }}></div>
                 </div>
+
                 {projetWizardStep === 1 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Etape 1/3 - Informations du projet</p>
                     <div><label className="input-label">Nom du Chantier</label><input type="text" className="glass-input" value={projetFormData.nomChantier} onChange={e => setProjetFormData({ ...projetFormData, nomChantier: e.target.value })} /></div>
                     <div><label className="input-label">Lieu</label><input type="text" className="glass-input" value={projetFormData.lieu} onChange={e => setProjetFormData({ ...projetFormData, lieu: e.target.value })} /></div>
                     <div><label className="input-label">Date de début</label><input type="date" className="glass-input" value={projetFormData.dateDebut} onChange={e => setProjetFormData({ ...projetFormData, dateDebut: e.target.value })} /></div>
-                    <div>
-                      <label className="input-label">Responsable Chantier (HSE Passport)</label>
-                      <select 
-                        className="glass-input" 
-                        value={projetFormData.responsableChantier} 
-                        onChange={e => setProjetFormData({ ...projetFormData, responsableChantier: e.target.value })}
-                      >
-                        <option value="">Sélectionner un responsable...</option>
-                        {employees.map(emp => (
-                          <option key={emp.matricule} value={emp.name}>{emp.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="input-label">Caisse d'outillage</label>
-                      <select 
-                        className="glass-input" 
-                        value={projetFormData.outillageCaisse} 
-                        onChange={e => setProjetFormData({ ...projetFormData, outillageCaisse: e.target.value })}
-                      >
-                        <option value="">Aucune caisse assignée...</option>
-                        {caisses.map(c => (
-                          <option key={c.numeroCaisse} value={c.numeroCaisse}>
-                            {c.numeroCaisse} — {c.affecterA}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
                     <button type="button" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} disabled={!projetFormData.nomChantier || !projetFormData.lieu || !projetFormData.dateDebut} onClick={() => setProjetWizardStep(2)}>Suivant →</button>
                   </div>
                 )}
+
                 {projetWizardStep === 2 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Intervenants</p>
-                    {projetIntervenants.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        {projetIntervenants.map((intv, i) => (
-                          <span key={i} style={{ background: 'var(--primary-glow)', color: 'var(--primary)', padding: '0.3rem 0.8rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                            {intv.name}
-                            <span style={{ cursor: 'pointer', opacity: 0.7 }} onClick={() => setProjetIntervenants(prev => prev.filter((_, idx) => idx !== i))}>✕</span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <div><label className="input-label">Rechercher un employé</label><input type="text" className="glass-input" placeholder="Tapez un nom ou matricule..." value={intervenantSearch} onChange={e => setIntervenantSearch(e.target.value)} /></div>
-                    {intervenantSearch.trim().length > 0 && (
-                      <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        {(() => {
-                          const filtered = employees.filter(emp => !projetIntervenants.some(intv => intv.matricule === emp.matricule)).filter(emp => emp.name.toLowerCase().includes(intervenantSearch.toLowerCase()) || emp.matricule.toLowerCase().includes(intervenantSearch.toLowerCase()))
-                          return filtered.length === 0 ? (<p style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '1rem', fontSize: '0.85rem' }}>Aucun résultat.</p>) : (
-                            filtered.map(emp => (
-                              <div key={emp.matricule} onClick={() => { setProjetIntervenants(prev => [...prev, { matricule: emp.matricule, name: emp.name, role: emp.role }]); setIntervenantSearch('') }} style={{ padding: '0.8rem 1rem', background: 'var(--card-bg-light)', borderRadius: '10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div><div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{emp.name}</div><div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>{emp.role} — {emp.matricule}</div></div>
-                                <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>+ Ajouter</span>
+                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Etape 2/3 - Responsable et Intervenants</p>
+                    <div>
+                      <label className="input-label">Responsable Chantier (HSE Passport)</label>
+                      <select className="glass-input" value={projetFormData.responsableChantier} onChange={e => setProjetFormData({ ...projetFormData, responsableChantier: e.target.value })}>
+                        <option value="">Selectionner le responsable...</option>
+                        {employees.map(emp => (<option key={emp.matricule} value={emp.name}>{emp.name}</option>))}
+                      </select>
+                    </div>
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+                      <label className="input-label">Intervenants ({projetIntervenants.length})</label>
+                      {projetIntervenants.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+                          {projetIntervenants.map((intv, i) => (
+                            <span key={i} style={{ background: 'var(--primary-glow)', color: 'var(--primary)', padding: '0.3rem 0.8rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              {intv.name}
+                              <span style={{ cursor: 'pointer', opacity: 0.7 }} onClick={() => setProjetIntervenants(prev => prev.filter((_, idx) => idx !== i))}>x</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div style={{ position: 'relative' }}>
+                        <input type="text" className="glass-input" placeholder="Ajouter des intervenants..." value={intervenantSearch} onChange={e => setIntervenantSearch(e.target.value)} />
+                        {intervenantSearch.trim().length > 0 && (
+                          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, background: 'var(--bg-deep)', border: '1px solid var(--glass-border)', borderRadius: '12px', marginTop: '5px', maxHeight: '200px', overflowY: 'auto', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+                            {employees.filter(emp => !projetIntervenants.some(intv => intv.matricule === emp.matricule)).filter(emp => emp.name.toLowerCase().includes(intervenantSearch.toLowerCase()) || emp.matricule.toLowerCase().includes(intervenantSearch.toLowerCase())).map(emp => (
+                              <div key={emp.matricule} onClick={() => { setProjetIntervenants(prev => [...prev, { matricule: emp.matricule, name: emp.name, role: emp.role }]); setIntervenantSearch('') }} style={{ padding: '0.8rem 1rem', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{emp.name}</div>
+                                <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>{emp.role}</div>
                               </div>
-                            ))
-                          )
-                        })()}
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
-                    <button type="button" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} onClick={() => setProjetWizardStep(3)}>Suivant →</button>
+                    </div>
+                    <button type="button" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} disabled={!projetFormData.responsableChantier} onClick={() => setProjetWizardStep(3)}>Suivant (Materiels) →</button>
                   </div>
                 )}
+
                 {projetWizardStep === 3 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Modifier la Check-list EPC</p>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                      {[
-                        { key: 'extincteurs', label: 'Extincteurs' },
-                        { key: 'balisage', label: 'Balisage / Signalisation' },
-                        { key: 'echafaudage', label: 'Échafaudage' },
-                        { key: 'gardecorps', label: 'Garde-corps / Protections' },
-                        { key: 'lignedevie', label: 'Lignes de vie' },
-                        { key: 'eclairage', label: 'Éclairage de zone' },
-                        { key: 'kitantipollution', label: 'Kit Anti-pollution' }
-                      ].map(({ key, label }) => (
-                        <div 
-                          key={key} 
-                          onClick={() => setProjetFormData({ ...projetFormData, epc: { ...projetFormData.epc, [key]: !projetFormData.epc[key] } })}
-                          style={{ 
-                            background: 'var(--card-bg-light)', 
-                            padding: '1rem', 
-                            borderRadius: '12px', 
-                            cursor: 'pointer',
-                            borderLeft: projetFormData.epc?.[key] ? '4px solid var(--accent)' : '4px solid var(--border)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.75rem'
-                          }}
-                        >
-                          <input type="checkbox" checked={projetFormData.epc?.[key] || false} onChange={() => {}} style={{ width: '18px', height: '18px' }} />
-                          <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{label}</span>
-                        </div>
-                      ))}
+                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Etape 3/3 - Materiels et EPC</p>
+                    <div>
+                      <label className="input-label">Outillage (Selection Caisse)</label>
+                      <select className="glass-input" value={projetFormData.outillageCaisse} onChange={e => setProjetFormData({ ...projetFormData, outillageCaisse: e.target.value })}>
+                        <option value="">Aucune caisse assignee...</option>
+                        {caisses.map(c => (<option key={c.numeroCaisse} value={c.numeroCaisse}>{c.numeroCaisse} - {c.affecterA}</option>))}
+                      </select>
                     </div>
-
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+                      <label className="input-label">Check-list EPC</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
+                        {[{ key: 'extincteurs', label: 'Extincteurs' }, { key: 'balisage', label: 'Balisage' }, { key: 'echafaudage', label: 'Echafaudage' }, { key: 'gardecorps', label: 'Garde-corps' }, { key: 'lignedevie', label: 'Lignes de vie' }, { key: 'eclairage', label: 'Eclairage' }, { key: 'kitantipollution', label: 'Anti-pollution' }].map(({ key, label }) => (
+                          <div key={key} onClick={() => setProjetFormData({ ...projetFormData, epc: { ...projetFormData.epc, [key]: !projetFormData.epc?.[key] } })} style={{ background: 'var(--card-bg-light)', padding: '0.75rem', borderRadius: '10px', cursor: 'pointer', border: projetFormData.epc?.[key] ? '1px solid var(--accent)' : '1px solid transparent', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.3s' }}>
+                            <input type="checkbox" checked={projetFormData.epc?.[key] || false} onChange={() => { }} style={{ width: '16px', height: '16px' }} />
+                            <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>{label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                     <button type="button" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} onClick={() => {
                       const manager = employees.find(e => e.name === projetFormData.responsableChantier);
                       let finalIntervenants = [...projetIntervenants];
@@ -1514,36 +1490,30 @@ function App() {
                         finalIntervenants.push({ matricule: manager.matricule, name: manager.name, role: manager.role });
                       }
                       const updated = [...projets]
-                      updated[selectedProjetIndex] = { 
-                        ...projetFormData, 
-                        intervenants: finalIntervenants, 
-                        responsableChantier: projetFormData.responsableChantier,
-                        outillageCaisse: projetFormData.outillageCaisse, 
-                        dateCreation: projets[selectedProjetIndex].dateCreation 
-                      }
-
+                      updated[selectedProjetIndex] = { ...projetFormData, intervenants: finalIntervenants, dateCreation: projets[selectedProjetIndex].dateCreation }
                       if (isProd && isOnline) {
                         const saveUpdate = async () => {
-                           try {
-                             const { CapacitorHttp } = await import('@capacitor/core')
-                             await CapacitorHttp.post({
-                               url: `${API_URL}/projets`,
-                               headers: { 'Content-Type': 'application/json' },
-                               data: updated[selectedProjetIndex]
-                             })
-                           } catch (e) {}
+                          try {
+                            const { CapacitorHttp } = await import('@capacitor/core')
+                            await CapacitorHttp.post({ url: `${API_URL}/projets`, headers: { 'Content-Type': 'application/json' }, data: updated[selectedProjetIndex] })
+                          } catch (e) { }
                         }
                         saveUpdate()
                       }
-
                       setProjets(updated)
                       localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
                       setProjetView('projet')
                       setProjetWizardStep(1)
-                      showToast('Projet mis à jour')
+                      showToast('Projet mis a jour')
                     }}>Enregistrer les modifications</button>
                   </div>
                 )}
+              </div>
+            )}
+            {projetView === 'parametres' && (
+              <div className="glass-panel" style={{ padding: '2rem' }}>
+                <h2>Paramètres Projet</h2>
+                <p>Configuration du module projet.</p>
               </div>
             )}
           </div>
@@ -1579,7 +1549,7 @@ function App() {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem' }}>
                     {[...new Set(employees.map(e => e.departement))].map(dept => {
                       const deptEmps = employees.filter(e => e.departement === dept);
-                      const avgComp = Math.round(deptEmps.reduce((acc, e) => acc + e.compliance, 0) / deptEmps.length);
+                      const avgComp = Math.round(deptEmps.reduce((acc, e) => acc + e.compliance, 0) / (deptEmps.length || 1));
                       return (
                         <div key={dept}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', fontWeight: 'bold' }}>
@@ -1658,7 +1628,7 @@ function App() {
                         <div style={{ fontSize: '0.85rem', color: acc.role === 'Admin' ? 'var(--accent)' : 'var(--text-dim)' }}>Accès {acc.role}</div>
                       </div>
                       {acc.email !== currentUser.email && (
-                        <button className="btn-icon" onClick={() => setConfirmDialog({ isOpen: true, item: acc, type: 'account' })} style={{ color: 'var(--danger)' }}>🗑</button>
+                        <button className="btn-icon" onClick={() => handleAccountDelete(acc.email)} style={{ color: 'var(--danger)' }}>🗑</button>
                       )}
                     </div>
                   ))}
@@ -1674,7 +1644,7 @@ function App() {
                 <form onSubmit={saveEmployee} className="form-grid">
                   <div className="avatar-upload-area">
                     <div className="avatar" style={{ width: '180px', height: '180px', cursor: 'pointer' }} onClick={() => document.getElementById('file-up').click()}>
-                      <img src={formData.avatar || avatarPlaceholder} />
+                      <img src={formData.avatar || avatarPlaceholder} alt="Avatar" />
                       <div style={{ position: 'absolute', bottom: '15px', right: '15px', background: 'var(--primary)', padding: '8px', borderRadius: '50%', boxShadow: '0 5px 15px var(--primary-glow)' }}>📷</div>
                     </div>
                     <input type="file" id="file-up" hidden onChange={handleFileChange} />
@@ -2024,7 +1994,7 @@ function App() {
         ))}
       </div>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
