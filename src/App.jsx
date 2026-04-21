@@ -56,44 +56,69 @@ function App() {
   const API_URL = 'http://46.105.75.234:3009/api'.trim()
   const DB_PREFIX = '_prod'
 
+  // --- Robust Storage Management ---
+  const safeStorage = {
+    setItem: (key, value) => {
+      try {
+        localStorage.setItem(key, value);
+      } catch (e) {
+        if (e.name === 'QuotaExceededError') {
+          console.warn("Storage full, attempting cleanup...");
+          // 1. Remove all old versions and non-critical data
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('hse_') && !k.includes('v3') && !k.includes('isAuthenticated') && !k.includes('currentUser')) {
+              localStorage.removeItem(k);
+            }
+          }
+          try {
+            // Retry
+            localStorage.setItem(key, value);
+          } catch (e2) {
+            // 2. If still full and it's the employee list, strip the heavy avatars for the cache
+            if (key.includes('employees')) {
+              try {
+                console.warn("Storage still full, caching without avatars...");
+                const data = JSON.parse(value);
+                const lightData = data.map(emp => ({ ...emp, avatar: null }));
+                localStorage.setItem(key, JSON.stringify(lightData));
+              } catch (e3) {
+                localStorage.removeItem(key); 
+              }
+            }
+          }
+        }
+      }
+    },
+    getItem: (key) => localStorage.getItem(key),
+    removeItem: (key) => localStorage.removeItem(key)
+  };
+
   // --- States ---
-  const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem('hse_isAuthenticated') === 'true')
+  const [isAuthenticated, setIsAuthenticated] = useState(() => safeStorage.getItem('hse_isAuthenticated') === 'true')
 
   // --- Nettoyage du Stockage local (One-time) ---
   useEffect(() => {
     try {
-      const currentKeys = [
-        `hse_accounts_v3${DB_PREFIX}`,
-        `hse_employees_v3${DB_PREFIX}`,
-        'hse_isAuthenticated',
-        'hse_currentUser',
-        'hse_theme',
-        'hse_selectedHub',
-        'gp_projets_v1',
-        'gp_caisses_v1'
-      ];
-      // Supprimer les anciennes clés pour libérer de l'espace (QuotaExceededError fix)
       const oldKeys = ['hse_employees', 'hse_employees_v2', 'hse_accounts_v1'];
       oldKeys.forEach(k => localStorage.removeItem(k));
-    } catch (e) {
-      console.warn("Erreur lors du nettoyage du localStorage:", e);
-    }
-  }, [DB_PREFIX])
+    } catch (e) {}
+  }, [])
 
-  const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('hse_currentUser') || 'null'))
+  const [currentUser, setCurrentUser] = useState(() => JSON.parse(safeStorage.getItem('hse_currentUser') || 'null'))
   const [theme, setTheme] = useState(() => {
-    const saved = localStorage.getItem('hse_theme');
+    const saved = safeStorage.getItem('hse_theme');
     if (saved) return saved;
     return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
   })
 
   const [accounts, setAccounts] = useState(() => {
-    const saved = localStorage.getItem(`hse_accounts_v3${DB_PREFIX}`)
+    const saved = safeStorage.getItem(`hse_accounts_v3${DB_PREFIX}`)
     return saved ? JSON.parse(saved) : INITIAL_ACCOUNTS
   })
 
   const [employees, setEmployees] = useState(() => {
-    const saved = localStorage.getItem(`hse_employees_v3${DB_PREFIX}`)
+    const saved = safeStorage.getItem(`hse_employees_v3${DB_PREFIX}`)
     return saved ? JSON.parse(saved) : INITIAL_EMPLOYEES
   })
   const [isSyncing, setIsSyncing] = useState(false)
@@ -151,7 +176,7 @@ function App() {
           })
           if (resAcc.status === 200 && resAcc.data.success) {
             setAccounts(resAcc.data.accounts)
-            localStorage.setItem(`hse_accounts_v3${DB_PREFIX}`, JSON.stringify(resAcc.data.accounts))
+            safeStorage.setItem(`hse_accounts_v3${DB_PREFIX}`, JSON.stringify(resAcc.data.accounts))
           }
 
           // Récupérer les employés
@@ -161,7 +186,7 @@ function App() {
           })
           if (resEmp.status === 200 && resEmp.data.success) {
             setEmployees(resEmp.data.employees)
-            localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(resEmp.data.employees))
+            safeStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(resEmp.data.employees))
           }
 
           // Récupérer les projets
@@ -171,7 +196,7 @@ function App() {
           })
           if (resProj.status === 200 && resProj.data.success) {
             setProjets(resProj.data.projets)
-            localStorage.setItem('gp_projets_v1', JSON.stringify(resProj.data.projets))
+            safeStorage.setItem('gp_projets_v1', JSON.stringify(resProj.data.projets))
           }
 
           // Récupérer les caisses
@@ -181,7 +206,7 @@ function App() {
           })
           if (resCaisse.status === 200 && resCaisse.data.success) {
             setCaisses(resCaisse.data.caisses)
-            localStorage.setItem('gp_caisses_v1', JSON.stringify(resCaisse.data.caisses))
+            safeStorage.setItem('gp_caisses_v1', JSON.stringify(resCaisse.data.caisses))
           }
         } catch (err) {
           console.error("Erreur chargement initial:", err)
@@ -195,19 +220,13 @@ function App() {
   }, [isProd, isAuthenticated, API_URL, DB_PREFIX])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(employees))
-      localStorage.setItem(`hse_accounts_v3${DB_PREFIX}`, JSON.stringify(accounts))
-    } catch (e) {
-      if (e.name === 'QuotaExceededError') {
-        console.error("Espace de stockage local saturé !");
-      }
-    }
+    safeStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(employees))
+    safeStorage.setItem(`hse_accounts_v3${DB_PREFIX}`, JSON.stringify(accounts))
   }, [employees, accounts, DB_PREFIX])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('hse_theme', theme)
+    safeStorage.setItem('hse_theme', theme)
   }, [theme])
 
 
@@ -306,15 +325,15 @@ function App() {
 
       if (resEmp.status === 200 && resEmp.data.success) {
         setEmployees(resEmp.data.employees)
-        localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(resEmp.data.employees))
+        safeStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(resEmp.data.employees))
       }
       if (resProj.status === 200 && resProj.data.success) {
         setProjets(resProj.data.projets)
-        localStorage.setItem('gp_projets_v1', JSON.stringify(resProj.data.projets))
+        safeStorage.setItem('gp_projets_v1', JSON.stringify(resProj.data.projets))
       }
       if (resCaisse.status === 200 && resCaisse.data.success) {
         setCaisses(resCaisse.data.caisses)
-        localStorage.setItem('gp_caisses_v1', JSON.stringify(resCaisse.data.caisses))
+        safeStorage.setItem('gp_caisses_v1', JSON.stringify(resCaisse.data.caisses))
       }
 
       showToast("Données synchronisées avec le serveur")
@@ -475,7 +494,7 @@ function App() {
           : [newEmp, ...employees]
 
         setEmployees(updatedEmployees)
-        localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(updatedEmployees))
+        safeStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(updatedEmployees))
 
         showToast("Données enregistrées directement sur le serveur !")
         setEmployeeView('list')
@@ -916,7 +935,7 @@ function App() {
                                  if (res.status === 200) {
                                    const updated = projets.filter((_, idx) => idx !== i)
                                    setProjets(updated)
-                                   localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
+                                   safeStorage.setItem('gp_projets_v1', JSON.stringify(updated))
                                    showToast('Projet supprimé du serveur')
                                  } else {
                                    showToast("Échec de la suppression sur le serveur", "danger")
@@ -1128,7 +1147,7 @@ function App() {
                           if (res.status === 200) {
                             const updated = [newProjet, ...projets]
                             setProjets(updated)
-                            localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
+                            safeStorage.setItem('gp_projets_v1', JSON.stringify(updated))
                             resetProjetForm()
                             setProjetView('projet')
                             showToast('Projet enregistré avec succès sur le serveur')
@@ -1182,7 +1201,7 @@ function App() {
                                if (res.status === 200) {
                                  const updated = caisses.filter((_, idx) => idx !== i);
                                  setCaisses(updated);
-                                 localStorage.setItem('gp_caisses_v1', JSON.stringify(updated));
+                                 safeStorage.setItem('gp_caisses_v1', JSON.stringify(updated));
                                  showToast('Caisse supprimée du serveur');
                                } else {
                                  showToast("Échec serveur lors de la suppression", "danger")
@@ -1296,7 +1315,7 @@ function App() {
                         if (res.status === 200) {
                           const updated = [caisseFormData, ...caisses];
                           setCaisses(updated);
-                          localStorage.setItem('gp_caisses_v1', JSON.stringify(updated));
+                          safeStorage.setItem('gp_caisses_v1', JSON.stringify(updated));
                           setProjetView('materiels');
                           showToast('Caisse enregistrée sur le serveur');
                         } else {
@@ -1560,7 +1579,7 @@ function App() {
 
                         if (res.status === 200) {
                           setProjets(updatedList)
-                          localStorage.setItem('gp_projets_v1', JSON.stringify(updatedList))
+                          safeStorage.setItem('gp_projets_v1', JSON.stringify(updatedList))
                           setProjetView('projet')
                           setProjetWizardStep(1)
                           showToast('Projet mis à jour sur le serveur')
