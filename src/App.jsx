@@ -235,7 +235,7 @@ function App() {
     if (isProd && isAuthenticated) {
       interval = setInterval(() => {
         if (isOnline && !isSyncing) {
-          syncData()
+          syncData(true)
         }
       }, 5 * 60 * 1000)
     }
@@ -247,7 +247,7 @@ function App() {
     }
   }, [isProd, isAuthenticated, isOnline, isSyncing])
 
-  const syncData = async () => {
+  const syncData = async (silent = false) => {
     if (!isOnline) {
       showToast("Pas de connexion internet", "error")
       return
@@ -277,10 +277,10 @@ function App() {
         localStorage.setItem('gp_caisses_v1', JSON.stringify(resCaisse.data.caisses))
       }
 
-      showToast("Mise à jour système terminée !")
+      if (!silent) showToast("Mise à jour système terminée !")
     } catch (err) {
       console.error(err)
-      showToast("Erreur de synchronisation", "danger")
+      if (!silent) showToast("Erreur de synchronisation", "danger")
     } finally {
       setIsSyncing(false)
     }
