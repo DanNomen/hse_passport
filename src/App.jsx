@@ -26,6 +26,16 @@ const PROJET_ACCOUNTS = [
   { email: 'projet@madagreen.com', password: 'admin', role: 'Admin' }
 ]
 
+const INITIAL_EPC = {
+  extincteurs: false,
+  balisage: false,
+  echafaudage: false,
+  gardecorps: false,
+  lignedevie: false,
+  eclairage: false,
+  kitantipollution: false
+}
+
 // Utilities
 const isExpired = (date) => date && new Date(date) < new Date()
 
@@ -42,7 +52,7 @@ const getStatusLabel = (comp) => {
 }
 
 function App() {
-  const isProd = true // <-- PASSÉ EN PRODUCTION
+  const isProd = false // <-- Mode local pour le développement
   const API_URL = 'http://46.105.75.234:3009/api'.trim()
   const DB_PREFIX = '_prod' // Stable prefix for mobile production
 
@@ -83,6 +93,25 @@ function App() {
   const [newAccountFormData, setNewAccountFormData] = useState({ email: '', password: '', role: 'Visiteur' })
   const [selectedHub, setSelectedHub] = useState(null)
   const [projetView, setProjetView] = useState('projet')
+  const [projets, setProjets] = useState(() => {
+    const saved = localStorage.getItem('gp_projets_v1')
+    return saved ? JSON.parse(saved) : []
+  })
+  const [projetFormData, setProjetFormData] = useState({ 
+    nomChantier: '', lieu: '', dateDebut: '', outillageCaisse: '', responsableChantier: '', 
+    epc: { ...INITIAL_EPC } 
+  })
+  const [projetWizardStep, setProjetWizardStep] = useState(1)
+  const [projetIntervenants, setProjetIntervenants] = useState([])
+  const [intervenantSearch, setIntervenantSearch] = useState('')
+  const [selectedProjetIndex, setSelectedProjetIndex] = useState(null)
+  const [caisses, setCaisses] = useState(() => {
+    const saved = localStorage.getItem('gp_caisses_v1')
+    return saved ? JSON.parse(saved) : []
+  })
+  const [caisseFormData, setCaisseFormData] = useState({ numeroCaisse: '', affecterA: '', materiels: [] })
+  const [newMateriel, setNewMateriel] = useState('')
+  const [previousView, setPreviousView] = useState(null)
 
   // Modal State
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, item: null, type: '' })
@@ -114,6 +143,26 @@ function App() {
           if (resEmp.status === 200 && resEmp.data.success) {
             setEmployees(resEmp.data.employees)
             localStorage.setItem(`hse_employees_v2${DB_PREFIX}`, JSON.stringify(resEmp.data.employees))
+          }
+
+          // Récupérer les projets
+          const resProj = await CapacitorHttp.get({
+            url: `${API_URL}/projets`,
+            connectTimeout: 30000
+          })
+          if (resProj.status === 200 && resProj.data.success) {
+            setProjets(resProj.data.projets)
+            localStorage.setItem('gp_projets_v1', JSON.stringify(resProj.data.projets))
+          }
+
+          // Récupérer les caisses
+          const resCaisse = await CapacitorHttp.get({
+            url: `${API_URL}/caisses`,
+            connectTimeout: 30000
+          })
+          if (resCaisse.status === 200 && resCaisse.data.success) {
+            setCaisses(resCaisse.data.caisses)
+            localStorage.setItem('gp_caisses_v1', JSON.stringify(resCaisse.data.caisses))
           }
         } catch (err) {
           console.error("Erreur chargement initial:", err)
@@ -196,36 +245,63 @@ function App() {
     try {
       const { CapacitorHttp } = await import('@capacitor/core')
 
-      // 1. PUSH (Envoyer/Mettre à jour les locaux vers le serveur)
+      // 1. PUSH Employees
       for (const employee of employees) {
         try {
-          const optionsPush = {
+          await CapacitorHttp.post({
             url: `${API_URL}/employees`,
             headers: { 'Content-Type': 'application/json' },
             data: employee
-          }
-          await CapacitorHttp.post(optionsPush)
-        } catch (pushErr) {
-          console.error(`Erreur push ${employee.matricule}:`, pushErr)
-        }
+          })
+        } catch (e) {}
       }
 
-      // 2. PULL (Récupérer l'état actuel du serveur pour mettre à jour le mobile)
-      const optionsPull = {
-        url: `${API_URL}/employees`,
-        headers: { 'Content-Type': 'application/json' }
-      }
-      const resPull = await CapacitorHttp.get(optionsPull)
-      if (resPull.status === 200 && resPull.data.success) {
-        const serverEmployees = resPull.data.employees || []
-        setEmployees(serverEmployees)
-        localStorage.setItem(`hse_employees_v2${DB_PREFIX}`, JSON.stringify(serverEmployees))
+      // 2. PUSH Projects
+      for (const p of projets) {
+        try {
+          await CapacitorHttp.post({
+             url: `${API_URL}/projets`,
+             headers: { 'Content-Type': 'application/json' },
+             data: p
+          })
+        } catch (e) {}
       }
 
-      showToast("Synchronisation et mise à jour terminées !")
+      // 3. PUSH Caisses
+      for (const c of caisses) {
+        try {
+          await CapacitorHttp.post({
+            url: `${API_URL}/caisses`,
+            headers: { 'Content-Type': 'application/json' },
+            data: c
+          })
+        } catch (e) {}
+      }
+
+      // 4. PULL ALL
+      const [resEmp, resProj, resCaisse] = await Promise.all([
+        CapacitorHttp.get({ url: `${API_URL}/employees` }),
+        CapacitorHttp.get({ url: `${API_URL}/projets` }),
+        CapacitorHttp.get({ url: `${API_URL}/caisses` })
+      ])
+
+      if (resEmp.status === 200 && resEmp.data.success) {
+        setEmployees(resEmp.data.employees)
+        localStorage.setItem(`hse_employees_v2${DB_PREFIX}`, JSON.stringify(resEmp.data.employees))
+      }
+      if (resProj.status === 200 && resProj.data.success) {
+        setProjets(resProj.data.projets)
+        localStorage.setItem('gp_projets_v1', JSON.stringify(resProj.data.projets))
+      }
+      if (resCaisse.status === 200 && resCaisse.data.success) {
+        setCaisses(resCaisse.data.caisses)
+        localStorage.setItem('gp_caisses_v1', JSON.stringify(resCaisse.data.caisses))
+      }
+
+      showToast("Mise à jour globale terminée !")
     } catch (err) {
       console.error(err)
-      showToast("Erreur de synchronisation : vous n'êtes pas connecté à internet", "danger")
+      showToast("Erreur de synchronisation", "danger")
     } finally {
       setIsSyncing(false)
     }
@@ -365,7 +441,7 @@ function App() {
     setDraftCert({ name: '', dateObtention: '', validite: '', dateExpiration: '' })
   }
 
-  const saveEmployee = (e) => {
+  const saveEmployee = async (e) => {
     e.preventDefault()
     const compliance = calculateCompliance(formData.certifications)
     const newEmp = {
@@ -373,7 +449,20 @@ function App() {
       name: `${formData.firstName} ${formData.lastName}`,
       compliance,
       status: getStatusLabel(compliance),
-      matricule: formData.matricule || `HSE-${Math.floor(Math.random() * 900) + 100}-PX`
+      matricule: formData.matricule || `HSE-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 900) + 100}-PX`
+    }
+
+    if (isProd && isOnline) {
+      try {
+        const { CapacitorHttp } = await import('@capacitor/core')
+        await CapacitorHttp.post({
+          url: `${API_URL}/employees`,
+          headers: { 'Content-Type': 'application/json' },
+          data: newEmp
+        })
+      } catch (err) {
+        console.error("Save online failed:", err)
+      }
     }
 
     const updatedEmployees = employeeView === 'edit'
@@ -383,9 +472,18 @@ function App() {
     setEmployees(updatedEmployees)
     localStorage.setItem(`hse_employees_v2${DB_PREFIX}`, JSON.stringify(updatedEmployees))
 
-    showToast(employeeView === 'edit' ? "Mise à jour locale réussie" : "Nouvel arrivant enregistré localement")
+    showToast(employeeView === 'edit' ? "Mise à jour réussie" : "Nouvel arrivant enregistré")
     setEmployeeView('list')
     setFormData({ firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true, epis: { gants: { checked: false, date: '' }, chaussures: { checked: false, date: '' }, casques: { checked: false, date: '' }, uniforme: { checked: false, date: '' }, gillet: { checked: false, date: '' } } })
+  }
+
+  const resetProjetForm = () => {
+    setProjetFormData({ 
+      nomChantier: '', lieu: '', dateDebut: '', outillageCaisse: '', responsableChantier: '',
+      epc: { ...INITIAL_EPC }
+    })
+    setProjetIntervenants([])
+    setProjetWizardStep(1)
   }
 
   const startEdit = (emp) => {
@@ -563,6 +661,15 @@ function App() {
                 </>
               ) : (
                 <>
+                  <button
+                    className="btn-icon"
+                    onClick={syncData}
+                    disabled={isSyncing}
+                    style={{ color: isOnline ? '#3b82f6' : 'var(--text-dim)' }}
+                    title="Actualiser les données"
+                  >
+                    <span className={isSyncing ? 'animate-spin' : ''} style={{ display: 'inline-block' }}>☁️</span>
+                  </button>
                   <button className={`btn-secondary nav-btn`} style={{ color: projetView === 'projet' ? '#3b82f6' : '' }} onClick={() => setProjetView('projet')}>Projet</button>
                   <button className={`btn-secondary nav-btn`} style={{ color: projetView === 'materiels' ? '#3b82f6' : '' }} onClick={() => setProjetView('materiels')}>Matériels</button>
                   {currentUser?.role === 'Admin' && (
@@ -718,9 +825,729 @@ function App() {
           </div>
         ) : selectedHub === 'projet' ? (
           <div className="animate-fade-in">
-            {projetView === 'projet' && (<div></div>)}
-            {projetView === 'materiels' && (<div></div>)}
+            {projetView === 'projet' && (
+              <div>
+                <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                    <h2 style={{ fontSize: '1.3rem', margin: 0 }}>Liste des Projets</h2>
+                    <button className="btn-primary" onClick={() => setProjetView('addProjet')}>+ Nouveau Projet</button>
+                  </div>
+                </div>
+                {projets.length === 0 ? (
+                  <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
+                    <p style={{ color: 'var(--text-dim)' }}>Aucun projet enregistré pour le moment.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {projets.map((p, i) => (
+                      <div key={i} className="glass-panel" style={{ padding: '1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                          <div>
+                            <div style={{ fontWeight: '700', fontSize: '1.1rem' }}>{p.nomChantier}</div>
+                            <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginTop: '0.25rem' }}>{p.lieu} — <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>Resp: {p.responsableChantier || 'N/A'}</span></div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem' }}>
+                              Début: {p.dateDebut} — {p.intervenants?.length || 0} intervenant(s)
+                              {p.outillageCaisse && <span style={{ marginLeft: '0.5rem', color: 'var(--primary)', fontWeight: 'bold' }}>• 📦 {p.outillageCaisse}</span>}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }} onClick={() => {
+                              setProjetFormData({ 
+                                nomChantier: p.nomChantier, 
+                                lieu: p.lieu, 
+                                dateDebut: p.dateDebut, 
+                                outillageCaisse: p.outillageCaisse || '',
+                                responsableChantier: p.responsableChantier || '',
+                                epc: p.epc || { ...INITIAL_EPC }
+                              })
+                              setProjetIntervenants(p.intervenants || [])
+                              setProjetView('detailProjet')
+                              setSelectedProjetIndex(i)
+                            }}>Détails</button>
+                            <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }} onClick={() => {
+                              setProjetFormData({ 
+                                nomChantier: p.nomChantier, 
+                                lieu: p.lieu, 
+                                dateDebut: p.dateDebut, 
+                                outillageCaisse: p.outillageCaisse || '',
+                                responsableChantier: p.responsableChantier || '',
+                                epc: p.epc || { ...INITIAL_EPC }
+                              })
+                              setProjetIntervenants(p.intervenants || [])
+                              setSelectedProjetIndex(i)
+                              setProjetWizardStep(1)
+                              setProjetView('editProjet')
+                            }}>Modifier</button>
+                            <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', color: 'var(--danger)' }} onClick={async () => {
+                                if (isProd && isOnline) {
+                                  try {
+                                    const { CapacitorHttp } = await import('@capacitor/core')
+                                    await CapacitorHttp.delete({ url: `${API_URL}/projets/${p.nomChantier}` })
+                                  } catch (e) {}
+                                }
+                                const updated = projets.filter((_, idx) => idx !== i)
+                                setProjets(updated)
+                                localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
+                                showToast('Projet supprimé')
+                              }}>Supprimer</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {projetView === 'addProjet' && (
+              <div className="glass-panel animate-slide-up" style={{ maxWidth: '600px', margin: '0 auto', padding: '3rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                  <button className="btn-icon" onClick={() => { if (projetWizardStep === 2) { setProjetWizardStep(1) } else { setProjetView('projet'); setProjetWizardStep(1); setProjetIntervenants([]) } }}>←</button>
+                  <h2>Nouveau Projet</h2>
+                </div>
+
+                {/* Step indicator */}
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem' }}>
+                  <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: 'var(--primary)' }}></div>
+                  <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: projetWizardStep >= 2 ? 'var(--primary)' : 'rgba(255,255,255,0.1)' }}></div>
+                  <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: projetWizardStep >= 3 ? 'var(--primary)' : 'rgba(255,255,255,0.1)' }}></div>
+                </div>
+
+                {projetWizardStep === 1 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Étape 1/2 — Informations du chantier</p>
+                    <div>
+                      <label className="input-label">Nom du Chantier</label>
+                      <input type="text" className="glass-input" placeholder="Ex: Chantier Toamasina" value={projetFormData.nomChantier} onChange={e => setProjetFormData({ ...projetFormData, nomChantier: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="input-label">Lieu</label>
+                      <input type="text" className="glass-input" placeholder="Ex: Antananarivo" value={projetFormData.lieu} onChange={e => setProjetFormData({ ...projetFormData, lieu: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="input-label">Date de début</label>
+                      <input type="date" className="glass-input" value={projetFormData.dateDebut} onChange={e => setProjetFormData({ ...projetFormData, dateDebut: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="input-label">Responsable Chantier (HSE Passport)</label>
+                      <select 
+                        className="glass-input" 
+                        value={projetFormData.responsableChantier} 
+                        onChange={e => setProjetFormData({ ...projetFormData, responsableChantier: e.target.value })}
+                      >
+                        <option value="">Sélectionner un responsable...</option>
+                        {employees.map(emp => (
+                          <option key={emp.matricule} value={emp.name}>{emp.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="input-label">Outillage (Sélection Caisse)</label>
+                      <select 
+                        className="glass-input" 
+                        value={projetFormData.outillageCaisse} 
+                        onChange={e => setProjetFormData({ ...projetFormData, outillageCaisse: e.target.value })}
+                      >
+                        <option value="">Aucune caisse assignée...</option>
+                        {caisses.map(c => (
+                          <option key={c.numeroCaisse} value={c.numeroCaisse}>
+                            {c.numeroCaisse} — {c.affecterA}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }}
+                      disabled={!projetFormData.nomChantier || !projetFormData.lieu || !projetFormData.dateDebut}
+                      onClick={() => setProjetWizardStep(2)}
+                    >Suivant →</button>
+                  </div>
+                )}
+
+                {projetWizardStep === 2 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Étape 2/2 — Sélection des intervenants</p>
+
+                    {projetIntervenants.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        {projetIntervenants.map((intv, i) => (
+                          <span key={i} style={{ background: 'var(--primary-glow)', color: 'var(--primary)', padding: '0.3rem 0.8rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            {intv.name}
+                            <span style={{ cursor: 'pointer', opacity: 0.7 }} onClick={() => setProjetIntervenants(prev => prev.filter((_, idx) => idx !== i))}>✕</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="input-label">Rechercher un employé</label>
+                      <input type="text" className="glass-input" placeholder="Tapez un nom ou matricule..." value={intervenantSearch} onChange={e => setIntervenantSearch(e.target.value)} />
+                    </div>
+
+                    {intervenantSearch.trim().length > 0 && (
+                      <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {(() => {
+                          const filtered = employees
+                            .filter(emp => !projetIntervenants.some(intv => intv.matricule === emp.matricule))
+                            .filter(emp => emp.name.toLowerCase().includes(intervenantSearch.toLowerCase()) || emp.matricule.toLowerCase().includes(intervenantSearch.toLowerCase()))
+                          return filtered.length === 0 ? (
+                            <p style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '1rem', fontSize: '0.85rem' }}>Aucun résultat trouvé.</p>
+                          ) : (
+                            filtered.map(emp => (
+                              <div
+                                key={emp.matricule}
+                                onClick={() => { setProjetIntervenants(prev => [...prev, { matricule: emp.matricule, name: emp.name, role: emp.role }]); setIntervenantSearch('') }}
+                                style={{ padding: '0.8rem 1rem', background: 'var(--card-bg-light)', borderRadius: '10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.2s' }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'var(--card-bg-light)'}
+                              >
+                                <div>
+                                  <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{emp.name}</div>
+                                  <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>{emp.role} — {emp.matricule}</div>
+                                </div>
+                                <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>+ Ajouter</span>
+                              </div>
+                            ))
+                          )
+                        })()}
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }}
+                      onClick={() => setProjetWizardStep(3)}
+                    >Suivant →</button>
+                  </div>
+                )}
+
+                {projetWizardStep === 3 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Étape 3/3 — Check-list EPC (Protection Collective)</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                      {[
+                        { key: 'extincteurs', label: 'Extincteurs' },
+                        { key: 'balisage', label: 'Balisage / Signalisation' },
+                        { key: 'echafaudage', label: 'Échafaudage' },
+                        { key: 'gardecorps', label: 'Garde-corps / Protections' },
+                        { key: 'lignedevie', label: 'Lignes de vie' },
+                        { key: 'eclairage', label: 'Éclairage de zone' },
+                        { key: 'kitantipollution', label: 'Kit Anti-pollution' }
+                      ].map(({ key, label }) => (
+                        <div 
+                          key={key} 
+                          onClick={() => setProjetFormData({ ...projetFormData, epc: { ...projetFormData.epc, [key]: !projetFormData.epc[key] } })}
+                          style={{ 
+                            background: 'var(--card-bg-light)', 
+                            padding: '1rem', 
+                            borderRadius: '12px', 
+                            cursor: 'pointer',
+                            borderLeft: projetFormData.epc[key] ? '4px solid var(--accent)' : '4px solid var(--border)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            transition: 'all 0.3s'
+                          }}
+                        >
+                          <input 
+                            type="checkbox" 
+                            checked={projetFormData.epc[key]} 
+                            onChange={() => {}} // Controlled by div click
+                            style={{ width: '18px', height: '18px' }}
+                          />
+                          <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{label}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }}
+                      onClick={() => {
+                        const manager = employees.find(e => e.name === projetFormData.responsableChantier);
+                        let finalIntervenants = [...projetIntervenants];
+                        if (manager && !finalIntervenants.some(i => i.matricule === manager.matricule)) {
+                          finalIntervenants.push({ matricule: manager.matricule, name: manager.name, role: manager.role });
+                        }
+                        const newProjet = { 
+                          ...projetFormData, 
+                          intervenants: finalIntervenants, 
+                          responsableChantier: projetFormData.responsableChantier,
+                          outillageCaisse: projetFormData.outillageCaisse, 
+                          dateCreation: new Date().toLocaleDateString('fr-FR') 
+                        }
+                        
+                        if (isProd && isOnline) {
+                          const saveProj = async () => {
+                            try {
+                              const { CapacitorHttp } = await import('@capacitor/core')
+                              await CapacitorHttp.post({
+                                url: `${API_URL}/projets`,
+                                headers: { 'Content-Type': 'application/json' },
+                                data: newProjet
+                              })
+                            } catch (e) {}
+                          }
+                          saveProj()
+                        }
+                        
+                        const updated = [newProjet, ...projets]
+                        setProjets(updated)
+                        localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
+                        resetProjetForm()
+                        setProjetView('projet')
+                        showToast('Projet enregistré avec succès')
+                      }}
+                    >Enregistrer le Projet</button>
+                  </div>
+                )}
+              </div>
+            )}
+            {projetView === 'materiels' && (
+              <div className="animate-fade-in">
+                <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                    <h2 style={{ fontSize: '1.3rem', margin: 0 }}>Gestion des Caisses (Matériels)</h2>
+                    <button className="btn-primary" onClick={() => {
+                      setCaisseFormData({ numeroCaisse: '', affecterA: '', materiels: [] });
+                      setProjetView('addCaisse');
+                    }}>+ Nouveau Caisse</button>
+                  </div>
+                </div>
+
+                {caisses.length === 0 ? (
+                  <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
+                    <p style={{ color: 'var(--text-dim)' }}>Aucune caisse enregistrée.</p>
+                  </div>
+                ) : (
+                  <div className="responsive-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                    {caisses.map((c, i) => (
+                      <div key={i} className="glass-panel animate-slide-up" style={{ padding: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                          <div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px' }}>Numéro Caisse</div>
+                            <div style={{ fontWeight: '800', fontSize: '1.2rem', color: 'var(--primary)' }}>{c.numeroCaisse}</div>
+                          </div>
+                          <button className="btn-icon" onClick={async () => {
+                            if (isProd && isOnline) {
+                              try {
+                                const { CapacitorHttp } = await import('@capacitor/core')
+                                await CapacitorHttp.delete({ url: `${API_URL}/caisses/${c.numeroCaisse}` })
+                              } catch (e) {}
+                            }
+                            const updated = caisses.filter((_, idx) => idx !== i);
+                            setCaisses(updated);
+                            localStorage.setItem('gp_caisses_v1', JSON.stringify(updated));
+                            showToast('Caisse supprimée');
+                          }} style={{ color: 'var(--danger)' }}>🗑</button>
+                        </div>
+                        <div style={{ marginBottom: '1rem' }}>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px' }}>Affecté à</div>
+                          <div style={{ fontWeight: '600' }}>{c.affecterA || 'Non assigné'}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem' }}>Matériels ({c.materiels?.length || 0})</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                            {c.materiels?.slice(0, 3).map((m, idx) => (
+                              <span key={idx} style={{ fontSize: '0.75rem', background: 'var(--card-bg-light)', padding: '2px 8px', borderRadius: '4px' }}>{m}</span>
+                            ))}
+                            {c.materiels?.length > 3 && <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>+{c.materiels.length - 3} de plus</span>}
+                          </div>
+                        </div>
+                        <button className="btn-secondary" style={{ width: '100%', marginTop: '1.5rem', fontSize: '0.8rem' }} onClick={() => {
+                          setCaisseFormData(c);
+                          setSelectedProjetIndex(i); // Reusing this index for caisse
+                          setProjetView('detailCaisse');
+                        }}>Détails complets</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {projetView === 'addCaisse' && (
+              <div className="glass-panel animate-slide-up" style={{ maxWidth: '600px', margin: '0 auto', padding: '3rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem' }}>
+                  <button className="btn-icon" onClick={() => setProjetView('materiels')}>←</button>
+                  <h2>Nouveau Caisse</h2>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <div>
+                    <label className="input-label">Numéro du Caisse</label>
+                    <input 
+                      type="text" 
+                      className="glass-input" 
+                      placeholder="Ex: CAI-001" 
+                      value={caisseFormData.numeroCaisse} 
+                      onChange={e => setCaisseFormData({ ...caisseFormData, numeroCaisse: e.target.value })} 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="input-label">Affecter à (HSE Passport)</label>
+                    <select 
+                      className="glass-input" 
+                      value={caisseFormData.affecterA} 
+                      onChange={e => setCaisseFormData({ ...caisseFormData, affecterA: e.target.value })}
+                    >
+                      <option value="">Sélectionner un collaborateur...</option>
+                      {employees.map(emp => (
+                        <option key={emp.matricule} value={emp.name}>{emp.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem' }}>
+                    <label className="input-label">Liste des matériels</label>
+                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                      <input 
+                        type="text" 
+                        className="glass-input" 
+                        placeholder="Ajouter un outil..." 
+                        value={newMateriel} 
+                        onChange={e => setNewMateriel(e.target.value)}
+                        onKeyPress={e => e.key === 'Enter' && (e.preventDefault(), setNewMateriel(''), setCaisseFormData({...caisseFormData, materiels: [...caisseFormData.materiels, newMateriel]}))}
+                      />
+                      <button className="btn-primary" onClick={() => {
+                        if (newMateriel.trim()) {
+                          setCaisseFormData({ ...caisseFormData, materiels: [...caisseFormData.materiels, newMateriel.trim()] });
+                          setNewMateriel('');
+                        }
+                      }}>Add</button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto' }}>
+                      {caisseFormData.materiels.map((m, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg-light)', padding: '0.6rem 1rem', borderRadius: '8px' }}>
+                          <span>{m}</span>
+                          <button style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }} onClick={() => setCaisseFormData({ ...caisseFormData, materiels: caisseFormData.materiels.filter((_, i) => i !== idx) })}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button 
+                    className="btn-primary" 
+                    style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }}
+                    disabled={!caisseFormData.numeroCaisse}
+                    onClick={async () => {
+                      if (isProd && isOnline) {
+                        try {
+                          const { CapacitorHttp } = await import('@capacitor/core')
+                          await CapacitorHttp.post({
+                            url: `${API_URL}/caisses`,
+                            headers: { 'Content-Type': 'application/json' },
+                            data: caisseFormData
+                          })
+                        } catch (e) {}
+                      }
+                      const updated = [caisseFormData, ...caisses];
+                      setCaisses(updated);
+                      localStorage.setItem('gp_caisses_v1', JSON.stringify(updated));
+                      setProjetView('materiels');
+                      showToast('Caisse créée avec succès');
+                    }}
+                  >Enregistrer la Caisse</button>
+                </div>
+              </div>
+            )}
+
+            {projetView === 'detailCaisse' && (
+              <div className="glass-panel animate-slide-up" style={{ maxWidth: '600px', margin: '0 auto', padding: '3rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem' }}>
+                  <button className="btn-icon" onClick={() => {
+                    if (previousView === 'detailProjet') {
+                      setProjetView('detailProjet');
+                      setPreviousView(null);
+                    } else {
+                      setProjetView('materiels');
+                    }
+                  }}>←</button>
+                  <h2>Détails de la Caisse</h2>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                    <div>
+                      <label className="input-label">Numéro Caisse</label>
+                      <div style={{ fontWeight: '800', fontSize: '1.5rem', color: 'var(--primary)' }}>{caisseFormData.numeroCaisse}</div>
+                    </div>
+                    <div>
+                      <label className="input-label">Affecté à</label>
+                      <div style={{ fontWeight: '700', fontSize: '1.1rem' }}>{caisseFormData.affecterA || 'N/A'}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem' }}>
+                    <label className="input-label">Contenu ({caisseFormData.materiels?.length || 0} articles)</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem' }}>
+                      {caisseFormData.materiels?.map((m, idx) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--card-bg-light)', padding: '0.8rem 1.2rem', borderRadius: '10px' }}>
+                          <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>#{idx + 1}</span>
+                          <span style={{ fontWeight: '500' }}>{m}</span>
+                        </div>
+                      ))}
+                      {(!caisseFormData.materiels || caisseFormData.materiels.length === 0) && (
+                        <p style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '1rem' }}>Cette caisse est vide.</p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <button className="btn-secondary" style={{ width: '100%', marginTop: '1rem' }} onClick={() => {
+                    if (previousView === 'detailProjet') {
+                      setProjetView('detailProjet');
+                      setPreviousView(null);
+                    } else {
+                      setProjetView('materiels');
+                    }
+                  }}>Retour à la liste</button>
+                </div>
+              </div>
+            )}
             {projetView === 'parametres' && (<div></div>)}
+
+            {/* Détails d'un projet */}
+            {projetView === 'detailProjet' && selectedProjetIndex !== null && (
+              <div className="glass-panel animate-slide-up" style={{ maxWidth: '600px', margin: '0 auto', padding: '3rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem' }}>
+                  <button className="btn-icon" onClick={() => setProjetView('projet')}>←</button>
+                  <h2>Détails du Projet</h2>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <div><label className="input-label">Nom du Chantier</label><p style={{ margin: '0.25rem 0 0', fontWeight: '600', fontSize: '1rem' }}>{projetFormData.nomChantier}</p></div>
+                  <div><label className="input-label">Responsable Chantier</label><p style={{ margin: '0.25rem 0 0', fontWeight: '700', fontSize: '1.1rem', color: 'var(--primary)' }}>{projetFormData.responsableChantier || "Non désigné"}</p></div>
+                  <div><label className="input-label">Lieu</label><p style={{ margin: '0.25rem 0 0', fontWeight: '600', fontSize: '1rem' }}>{projetFormData.lieu}</p></div>
+                  <div><label className="input-label">Date de début</label><p style={{ margin: '0.25rem 0 0', fontWeight: '600', fontSize: '1rem' }}>{projetFormData.dateDebut}</p></div>
+                  <div>
+                    <label className="input-label">Caisse d'outillage</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--card-bg-light)', padding: '1rem', borderRadius: '10px', marginTop: '0.5rem' }}>
+                      <div style={{ fontSize: '1.5rem' }}>📦</div>
+                      <div>
+                        {projetFormData.outillageCaisse ? (
+                          <div 
+                            style={{ cursor: 'pointer' }} 
+                            onClick={() => {
+                              const caisse = caisses.find(c => c.numeroCaisse === projetFormData.outillageCaisse);
+                              if (caisse) {
+                                setPreviousView('detailProjet');
+                                setCaisseFormData(caisse);
+                                setProjetView('detailCaisse');
+                              } else {
+                                showToast("Caisse introuvable", "danger");
+                              }
+                            }}
+                          >
+                            <div style={{ fontWeight: '700', fontSize: '1rem', color: 'var(--primary)', textDecoration: 'underline' }}>Caisse: {projetFormData.outillageCaisse}</div>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>
+                              Affecté à: {caisses.find(c => c.numeroCaisse === projetFormData.outillageCaisse)?.affecterA || "Personnel non identifié"}
+                            </div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--accent)', marginTop: '0.2rem' }}>Voir le contenu →</div>
+                          </div>
+                        ) : (
+                          <div style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>Aucune caisse assignée</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="input-label">Intervenants ({projetIntervenants.length})</label>
+                    {projetIntervenants.length === 0 ? (
+                      <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginTop: '0.25rem' }}>Aucun intervenant assigné.</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
+                        {projetIntervenants.map((intv, i) => (
+                          <div key={i} style={{ padding: '0.6rem 1rem', background: 'var(--card-bg-light)', borderRadius: '8px' }}>
+                            <span style={{ fontWeight: '600' }}>{intv.name}</span>
+                            <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem', marginLeft: '0.5rem' }}>— {intv.role}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem' }}>
+                    <label className="input-label">Protections Collectives (EPC)</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginTop: '0.75rem' }}>
+                      {[
+                        { key: 'extincteurs', label: '🧯 Extincteurs' },
+                        { key: 'balisage', label: '🚧 Balisage' },
+                        { key: 'echafaudage', label: '🏗️ Échafaudage' },
+                        { key: 'gardecorps', label: '🛡️ Garde-corps' },
+                        { key: 'lignedevie', label: '⚓ Lignes de vie' },
+                        { key: 'eclairage', label: '💡 Éclairage' },
+                        { key: 'kitantipollution', label: '🧼 Anti-poll.' }
+                      ].map(({ key, label }) => {
+                        const isSet = projetFormData.epc?.[key];
+                        return (
+                          <div key={key} style={{ padding: '0.6rem', borderRadius: '8px', background: isSet ? 'var(--accent-glow)' : 'var(--card-bg-light)', border: isSet ? '1px solid var(--accent)' : '1px solid transparent', opacity: isSet ? 1 : 0.4, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
+                            <span>{isSet ? '✅' : '⚪'}</span>
+                            <span style={{ fontWeight: isSet ? 'bold' : 'normal' }}>{label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modifier un projet */}
+            {projetView === 'editProjet' && selectedProjetIndex !== null && (
+              <div className="glass-panel animate-slide-up" style={{ maxWidth: '600px', margin: '0 auto', padding: '3rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                  <button className="btn-icon" onClick={() => { if (projetWizardStep > 1) { setProjetWizardStep(projetWizardStep - 1) } else { setProjetView('projet') } }}>←</button>
+                  <h2>Modifier le Projet</h2>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem' }}>
+                  <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: 'var(--primary)' }}></div>
+                  <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: projetWizardStep >= 2 ? 'var(--primary)' : 'rgba(255,255,255,0.1)' }}></div>
+                  <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: projetWizardStep >= 3 ? 'var(--primary)' : 'rgba(255,255,255,0.1)' }}></div>
+                </div>
+                {projetWizardStep === 1 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <div><label className="input-label">Nom du Chantier</label><input type="text" className="glass-input" value={projetFormData.nomChantier} onChange={e => setProjetFormData({ ...projetFormData, nomChantier: e.target.value })} /></div>
+                    <div><label className="input-label">Lieu</label><input type="text" className="glass-input" value={projetFormData.lieu} onChange={e => setProjetFormData({ ...projetFormData, lieu: e.target.value })} /></div>
+                    <div><label className="input-label">Date de début</label><input type="date" className="glass-input" value={projetFormData.dateDebut} onChange={e => setProjetFormData({ ...projetFormData, dateDebut: e.target.value })} /></div>
+                    <div>
+                      <label className="input-label">Responsable Chantier (HSE Passport)</label>
+                      <select 
+                        className="glass-input" 
+                        value={projetFormData.responsableChantier} 
+                        onChange={e => setProjetFormData({ ...projetFormData, responsableChantier: e.target.value })}
+                      >
+                        <option value="">Sélectionner un responsable...</option>
+                        {employees.map(emp => (
+                          <option key={emp.matricule} value={emp.name}>{emp.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="input-label">Caisse d'outillage</label>
+                      <select 
+                        className="glass-input" 
+                        value={projetFormData.outillageCaisse} 
+                        onChange={e => setProjetFormData({ ...projetFormData, outillageCaisse: e.target.value })}
+                      >
+                        <option value="">Aucune caisse assignée...</option>
+                        {caisses.map(c => (
+                          <option key={c.numeroCaisse} value={c.numeroCaisse}>
+                            {c.numeroCaisse} — {c.affecterA}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button type="button" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} disabled={!projetFormData.nomChantier || !projetFormData.lieu || !projetFormData.dateDebut} onClick={() => setProjetWizardStep(2)}>Suivant →</button>
+                  </div>
+                )}
+                {projetWizardStep === 2 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Intervenants</p>
+                    {projetIntervenants.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        {projetIntervenants.map((intv, i) => (
+                          <span key={i} style={{ background: 'var(--primary-glow)', color: 'var(--primary)', padding: '0.3rem 0.8rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            {intv.name}
+                            <span style={{ cursor: 'pointer', opacity: 0.7 }} onClick={() => setProjetIntervenants(prev => prev.filter((_, idx) => idx !== i))}>✕</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div><label className="input-label">Rechercher un employé</label><input type="text" className="glass-input" placeholder="Tapez un nom ou matricule..." value={intervenantSearch} onChange={e => setIntervenantSearch(e.target.value)} /></div>
+                    {intervenantSearch.trim().length > 0 && (
+                      <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {(() => {
+                          const filtered = employees.filter(emp => !projetIntervenants.some(intv => intv.matricule === emp.matricule)).filter(emp => emp.name.toLowerCase().includes(intervenantSearch.toLowerCase()) || emp.matricule.toLowerCase().includes(intervenantSearch.toLowerCase()))
+                          return filtered.length === 0 ? (<p style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '1rem', fontSize: '0.85rem' }}>Aucun résultat.</p>) : (
+                            filtered.map(emp => (
+                              <div key={emp.matricule} onClick={() => { setProjetIntervenants(prev => [...prev, { matricule: emp.matricule, name: emp.name, role: emp.role }]); setIntervenantSearch('') }} style={{ padding: '0.8rem 1rem', background: 'var(--card-bg-light)', borderRadius: '10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div><div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{emp.name}</div><div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>{emp.role} — {emp.matricule}</div></div>
+                                <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>+ Ajouter</span>
+                              </div>
+                            ))
+                          )
+                        })()}
+                      </div>
+                    )}
+                    <button type="button" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} onClick={() => setProjetWizardStep(3)}>Suivant →</button>
+                  </div>
+                )}
+                {projetWizardStep === 3 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Modifier la Check-list EPC</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                      {[
+                        { key: 'extincteurs', label: 'Extincteurs' },
+                        { key: 'balisage', label: 'Balisage / Signalisation' },
+                        { key: 'echafaudage', label: 'Échafaudage' },
+                        { key: 'gardecorps', label: 'Garde-corps / Protections' },
+                        { key: 'lignedevie', label: 'Lignes de vie' },
+                        { key: 'eclairage', label: 'Éclairage de zone' },
+                        { key: 'kitantipollution', label: 'Kit Anti-pollution' }
+                      ].map(({ key, label }) => (
+                        <div 
+                          key={key} 
+                          onClick={() => setProjetFormData({ ...projetFormData, epc: { ...projetFormData.epc, [key]: !projetFormData.epc[key] } })}
+                          style={{ 
+                            background: 'var(--card-bg-light)', 
+                            padding: '1rem', 
+                            borderRadius: '12px', 
+                            cursor: 'pointer',
+                            borderLeft: projetFormData.epc?.[key] ? '4px solid var(--accent)' : '4px solid var(--border)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem'
+                          }}
+                        >
+                          <input type="checkbox" checked={projetFormData.epc?.[key] || false} onChange={() => {}} style={{ width: '18px', height: '18px' }} />
+                          <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{label}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button type="button" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} onClick={() => {
+                      const manager = employees.find(e => e.name === projetFormData.responsableChantier);
+                      let finalIntervenants = [...projetIntervenants];
+                      if (manager && !finalIntervenants.some(i => i.matricule === manager.matricule)) {
+                        finalIntervenants.push({ matricule: manager.matricule, name: manager.name, role: manager.role });
+                      }
+                      const updated = [...projets]
+                      updated[selectedProjetIndex] = { 
+                        ...projetFormData, 
+                        intervenants: finalIntervenants, 
+                        responsableChantier: projetFormData.responsableChantier,
+                        outillageCaisse: projetFormData.outillageCaisse, 
+                        dateCreation: projets[selectedProjetIndex].dateCreation 
+                      }
+
+                      if (isProd && isOnline) {
+                        const saveUpdate = async () => {
+                           try {
+                             const { CapacitorHttp } = await import('@capacitor/core')
+                             await CapacitorHttp.post({
+                               url: `${API_URL}/projets`,
+                               headers: { 'Content-Type': 'application/json' },
+                               data: updated[selectedProjetIndex]
+                             })
+                           } catch (e) {}
+                        }
+                        saveUpdate()
+                      }
+
+                      setProjets(updated)
+                      localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
+                      setProjetView('projet')
+                      setProjetWizardStep(1)
+                      showToast('Projet mis à jour')
+                    }}>Enregistrer les modifications</button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <div className="animate-fade-in">

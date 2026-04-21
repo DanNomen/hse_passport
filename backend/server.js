@@ -56,6 +56,23 @@ const initDB = async () => {
         aptitude_medicale BOOLEAN DEFAULT true,
         epis JSONB NOT NULL DEFAULT '{}'
       );
+      CREATE TABLE IF NOT EXISTS caisses (
+        id SERIAL PRIMARY KEY,
+        numero_caisse VARCHAR(100) UNIQUE NOT NULL,
+        affecter_a VARCHAR(200),
+        materiels JSONB NOT NULL DEFAULT '[]'
+      );
+      CREATE TABLE IF NOT EXISTS projets (
+        id SERIAL PRIMARY KEY,
+        nom_chantier VARCHAR(200) NOT NULL,
+        lieu VARCHAR(200) NOT NULL,
+        date_debut VARCHAR(100),
+        outillage_caisse VARCHAR(100),
+        responsable_chantier VARCHAR(200),
+        epc JSONB NOT NULL DEFAULT '{}',
+        intervenants JSONB NOT NULL DEFAULT '[]',
+        date_creation VARCHAR(100)
+      );
     `);
     
     // Auto-migration (add column if missing)
@@ -125,20 +142,6 @@ app.delete('/api/accounts/:email', async (req, res) => {
   }
 });
 
-app.post('/api/login', async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const result = await pool.query('SELECT * FROM accounts WHERE email = $1 AND password = $2', [email, password]);
-    if (result.rows.length > 0) {
-      res.json({ success: true, account: result.rows[0] });
-    } else {
-      res.status(401).json({ success: false, message: 'Identifiants invalides' });
-    }
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // 3. Gestion des Employés
 app.get('/api/employees', async (req, res) => {
   try {
@@ -190,6 +193,104 @@ app.delete('/api/employees/:matricule', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// 4. Gestion des Caisses
+app.get('/api/caisses', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM caisses ORDER BY id DESC');
+    const formatted = result.rows.map(r => ({
+      numeroCaisse: r.numero_caisse,
+      affecterA: r.affecter_a,
+      materiels: r.materiels || []
+    }));
+    res.json({ success: true, caisses: formatted });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/caisses', async (req, res) => {
+  const caisse = req.body;
+  try {
+    const check = await pool.query('SELECT id FROM caisses WHERE numero_caisse = $1', [caisse.numeroCaisse]);
+    if (check.rows.length > 0) {
+      await pool.query(`
+        UPDATE caisses 
+        SET affecter_a=$1, materiels=$2
+        WHERE numero_caisse=$3
+      `, [caisse.affecterA, JSON.stringify(caisse.materiels || []), caisse.numeroCaisse]);
+    } else {
+      await pool.query(`
+        INSERT INTO caisses (numero_caisse, affecter_a, materiels)
+        VALUES ($1, $2, $3)
+      `, [caisse.numeroCaisse, caisse.affecterA, JSON.stringify(caisse.materiels || [])]);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/caisses/:numeroCaisse', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM caisses WHERE numero_caisse = $1', [req.params.numeroCaisse]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. Gestion des Projets
+app.get('/api/projets', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM projets ORDER BY id DESC');
+    const formatted = result.rows.map(r => ({
+      ...r,
+      nomChantier: r.nom_chantier,
+      dateDebut: r.date_debut,
+      outillageCaisse: r.outillage_caisse,
+      responsableChantier: r.responsable_chantier,
+      dateCreation: r.date_creation
+    }));
+    res.json({ success: true, projets: formatted });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/projets', async (req, res) => {
+  const p = req.body;
+  try {
+    // On utilise le nom du chantier comme identifiant pour l'upsert simplifié ici (ou on pourrait utiliser un id)
+    // Pour plus de robustesse, on check si un projet avec le même nom et lieu existe
+    const check = await pool.query('SELECT id FROM projets WHERE nom_chantier = $1 AND lieu = $2', [p.nomChantier, p.lieu]);
+    if (check.rows.length > 0) {
+      await pool.query(`
+        UPDATE projets 
+        SET date_debut=$1, outillage_caisse=$2, responsable_chantier=$3, epc=$4, intervenants=$5, date_creation=$6
+        WHERE nom_chantier=$7 AND lieu=$8
+      `, [p.dateDebut, p.outillageCaisse, p.responsableChantier, JSON.stringify(p.epc || {}), JSON.stringify(p.intervenants || []), p.dateCreation, p.nomChantier, p.lieu]);
+    } else {
+      await pool.query(`
+        INSERT INTO projets (nom_chantier, lieu, date_debut, outillage_caisse, responsable_chantier, epc, intervenants, date_creation)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `, [p.nomChantier, p.lieu, p.dateDebut, p.outillageCaisse, p.responsableChantier, JSON.stringify(p.epc || {}), JSON.stringify(p.intervenants || []), p.dateCreation]);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/projets/:nomChantier', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM projets WHERE nom_chantier = $1', [req.params.nomChantier]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 app.listen(port, () => {
   console.log(`Backend HSE Passport API running on port ${port} `);
