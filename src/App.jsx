@@ -258,6 +258,38 @@ function App() {
     }
   }, [isProd, isAuthenticated, isOnline, isSyncing])
 
+  // --- API Service (Robustness & Fallback) ---
+  const apiCall = async (method, endpoint, data = null) => {
+    const url = `${API_URL}${endpoint}`
+    const options = {
+      url,
+      headers: { 'Content-Type': 'application/json' },
+      data: data,
+      connectTimeout: 15000, // Timeout un peu plus long pour les mauvaises connexions
+      method: method.toUpperCase()
+    }
+
+    try {
+      const { CapacitorHttp } = await import('@capacitor/core')
+      const response = await CapacitorHttp.request(options)
+      return response
+    } catch (capError) {
+      console.warn("CapacitorHttp failed, switching to fetch fallback:", capError)
+      try {
+        const fetchOptions = {
+          method: method.toUpperCase(),
+          headers: { 'Content-Type': 'application/json' },
+          body: data ? JSON.stringify(data) : null
+        }
+        const res = await fetch(url, fetchOptions)
+        const resData = await res.json()
+        return { status: res.status, data: resData }
+      } catch (fetchError) {
+        throw new Error("Impossible de joindre le serveur. Vérifiez votre connexion ou l'état du serveur.")
+      }
+    }
+  }
+
   const syncData = async () => {
     if (!isOnline) {
       showToast("Pas de connexion internet", "danger")
@@ -266,12 +298,10 @@ function App() {
 
     setIsSyncing(true)
     try {
-      const { CapacitorHttp } = await import('@capacitor/core')
-
       const [resEmp, resProj, resCaisse] = await Promise.all([
-        CapacitorHttp.get({ url: `${API_URL}/employees` }),
-        CapacitorHttp.get({ url: `${API_URL}/projets` }),
-        CapacitorHttp.get({ url: `${API_URL}/caisses` })
+        apiCall('GET', '/employees'),
+        apiCall('GET', '/projets'),
+        apiCall('GET', '/caisses')
       ])
 
       if (resEmp.status === 200 && resEmp.data.success) {
@@ -290,7 +320,7 @@ function App() {
       showToast("Données synchronisées avec le serveur")
     } catch (err) {
       console.error(err)
-      showToast("Erreur de connexion au serveur", "danger")
+      showToast(err.message, "danger")
     } finally {
       setIsSyncing(false)
     }
@@ -317,14 +347,7 @@ function App() {
 
     if (isProd && isOnline) {
       try {
-        const { CapacitorHttp } = await import('@capacitor/core')
-        const res = await CapacitorHttp.post({
-          url: `${API_URL}/login`,
-          headers: { 'Content-Type': 'application/json' },
-          data: { email: emailInput, password: passwordInput },
-          connectTimeout: 5000
-        })
-
+        const res = await apiCall('POST', '/login', { email: emailInput, password: passwordInput })
         if (res.status === 200 && res.data.success) {
           finalizeAuth(res.data.account)
           return
@@ -356,13 +379,7 @@ function App() {
     
     try {
       showToast("Création du compte en cours...", "info")
-      const { CapacitorHttp } = await import('@capacitor/core')
-      const res = await CapacitorHttp.post({
-        url: `${API_URL}/accounts`,
-        headers: { 'Content-Type': 'application/json' },
-        data: accountData,
-        connectTimeout: 10000
-      })
+      const res = await apiCall('POST', '/accounts', accountData)
 
       if (res.status === 200) {
         setAccounts(prev => [...prev, accountData])
@@ -372,7 +389,7 @@ function App() {
         showToast("Erreur lors de la création sur le serveur", "danger")
       }
     } catch (err) {
-      showToast("Serveur injoignable. Action annulée.", "danger")
+      showToast(err.message, "danger")
     }
   }
 
@@ -391,11 +408,10 @@ function App() {
 
     try {
       showToast("Suppression en cours...", "info")
-      const { CapacitorHttp } = await import('@capacitor/core')
 
       if (dialogType === 'account') {
         const email = dialogItem.email;
-        const res = await CapacitorHttp.delete({ url: `${API_URL}/accounts/${email}`, connectTimeout: 8000 })
+        const res = await apiCall('DELETE', `/accounts/${email}`)
         
         if (res.status === 200) {
           setAccounts(prev => prev.filter(a => a.email !== email))
@@ -406,7 +422,7 @@ function App() {
 
       } else if (dialogType === 'employee') {
         const id = dialogItem.matricule;
-        const res = await CapacitorHttp.delete({ url: `${API_URL}/employees/${id}`, connectTimeout: 8000 })
+        const res = await apiCall('DELETE', `/employees/${id}`)
 
         if (res.status === 200) {
           const updatedEmployees = employees.filter(e => e.matricule !== id)
@@ -418,7 +434,7 @@ function App() {
         }
       }
     } catch (e) {
-      showToast("Le serveur est injoignable.", "danger")
+      showToast(e.message, "danger")
     }
 
     setConfirmDialog({ isOpen: false, item: null, type: '' });
@@ -451,13 +467,7 @@ function App() {
 
     try {
       showToast("Envoi au serveur de production...", "info")
-      const { CapacitorHttp } = await import('@capacitor/core')
-      const res = await CapacitorHttp.post({
-        url: `${API_URL}/employees`,
-        headers: { 'Content-Type': 'application/json' },
-        data: newEmp,
-        connectTimeout: 12000
-      })
+      const res = await apiCall('POST', '/employees', newEmp)
 
       if (res.status === 200) {
         const updatedEmployees = employeeView === 'edit'
@@ -475,7 +485,7 @@ function App() {
       }
     } catch (err) {
       console.error("Save online failed:", err)
-      showToast("Impossible de joindre le serveur. Données non sauvegardées.", "danger")
+      showToast(err.message, "danger")
     }
   }
 
@@ -901,11 +911,7 @@ function App() {
                                }
                                try {
                                  showToast("Suppression sur le serveur...", "info")
-                                 const { CapacitorHttp } = await import('@capacitor/core')
-                                 const res = await CapacitorHttp.delete({ 
-                                   url: `${API_URL}/projets/${p.nomChantier}`,
-                                   connectTimeout: 8000 
-                                 })
+                                 const res = await apiCall('DELETE', `/projets/${p.nomChantier}`)
                                  
                                  if (res.status === 200) {
                                    const updated = projets.filter((_, idx) => idx !== i)
@@ -916,7 +922,7 @@ function App() {
                                    showToast("Échec de la suppression sur le serveur", "danger")
                                  }
                                } catch (e) {
-                                 showToast("Serveur injoignable.", "danger")
+                                 showToast(e.message, "danger")
                                }
                              }}>Supprimer</button>
                           </div>
@@ -1117,13 +1123,7 @@ function App() {
 
                         try {
                           showToast("Création du projet sur le serveur...", "info")
-                          const { CapacitorHttp } = await import('@capacitor/core')
-                          const res = await CapacitorHttp.post({
-                            url: `${API_URL}/projets`,
-                            headers: { 'Content-Type': 'application/json' },
-                            data: newProjet,
-                            connectTimeout: 10000
-                          })
+                          const res = await apiCall('POST', '/projets', newProjet)
 
                           if (res.status === 200) {
                             const updated = [newProjet, ...projets]
@@ -1136,7 +1136,7 @@ function App() {
                             showToast("Échec de l'enregistrement sur le serveur", "danger")
                           }
                         } catch (e) {
-                          showToast("Serveur injoignable.", "danger")
+                          showToast(e.message, "danger")
                         }
                       }}
                     >Finaliser et Créer le Projet</button>
@@ -1177,11 +1177,7 @@ function App() {
                              }
                              try {
                                showToast("Suppression caisse...", "info")
-                               const { CapacitorHttp } = await import('@capacitor/core')
-                               const res = await CapacitorHttp.delete({ 
-                                 url: `${API_URL}/caisses/${c.numeroCaisse}`,
-                                 connectTimeout: 8000 
-                               })
+                               const res = await apiCall('DELETE', `/caisses/${c.numeroCaisse}`)
 
                                if (res.status === 200) {
                                  const updated = caisses.filter((_, idx) => idx !== i);
@@ -1192,7 +1188,7 @@ function App() {
                                  showToast("Échec serveur lors de la suppression", "danger")
                                }
                              } catch (e) {
-                               showToast("Serveur injoignable.", "danger")
+                               showToast(e.message, "danger")
                              }
                            }} style={{ color: 'var(--danger)' }}>🗑</button>
                         </div>
@@ -1295,13 +1291,7 @@ function App() {
 
                       try {
                         showToast("Enregistrement caisse...", "info")
-                        const { CapacitorHttp } = await import('@capacitor/core')
-                        const res = await CapacitorHttp.post({
-                          url: `${API_URL}/caisses`,
-                          headers: { 'Content-Type': 'application/json' },
-                          data: caisseFormData,
-                          connectTimeout: 8000
-                        })
+                        const res = await apiCall('POST', '/caisses', caisseFormData)
 
                         if (res.status === 200) {
                           const updated = [caisseFormData, ...caisses];
@@ -1313,7 +1303,7 @@ function App() {
                           showToast("Erreur serveur lors de la création", "danger")
                         }
                       } catch (e) {
-                        showToast("Serveur injoignable.", "danger")
+                        showToast(e.message, "danger")
                       }
                     }}
                   >Enregistrer la Caisse</button>
@@ -1566,13 +1556,7 @@ function App() {
 
                       try {
                         showToast("Mise à jour sur le serveur...", "info")
-                        const { CapacitorHttp } = await import('@capacitor/core')
-                        const res = await CapacitorHttp.post({ 
-                          url: `${API_URL}/projets`, 
-                          headers: { 'Content-Type': 'application/json' }, 
-                          data: updatedProjet,
-                          connectTimeout: 10000 
-                        })
+                        const res = await apiCall('POST', '/projets', updatedProjet)
 
                         if (res.status === 200) {
                           setProjets(updatedList)
@@ -1584,7 +1568,7 @@ function App() {
                           showToast("Échec de la mise à jour serveur", "danger")
                         }
                       } catch (e) {
-                        showToast("Serveur injoignable.", "danger")
+                        showToast(e.message, "danger")
                       }
                     }}>Enregistrer les modifications</button>
                   </div>
