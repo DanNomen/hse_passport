@@ -895,17 +895,30 @@ function App() {
                               setProjetView('editProjet')
                             }}>Modifier</button>
                             <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', color: 'var(--danger)' }} onClick={async () => {
-                              if (isProd && isOnline) {
-                                try {
-                                  const { CapacitorHttp } = await import('@capacitor/core')
-                                  await CapacitorHttp.delete({ url: `${API_URL}/projets/${p.nomChantier}` })
-                                } catch (e) {}
-                              }
-                              const updated = projets.filter((_, idx) => idx !== i)
-                              setProjets(updated)
-                              localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
-                              showToast('Projet supprimé')
-                            }}>Supprimer</button>
+                               if (!isOnline) {
+                                 showToast("Désolé, connexion internet requise pour supprimer", "danger")
+                                 return
+                               }
+                               try {
+                                 showToast("Suppression sur le serveur...", "info")
+                                 const { CapacitorHttp } = await import('@capacitor/core')
+                                 const res = await CapacitorHttp.delete({ 
+                                   url: `${API_URL}/projets/${p.nomChantier}`,
+                                   connectTimeout: 8000 
+                                 })
+                                 
+                                 if (res.status === 200) {
+                                   const updated = projets.filter((_, idx) => idx !== i)
+                                   setProjets(updated)
+                                   localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
+                                   showToast('Projet supprimé du serveur')
+                                 } else {
+                                   showToast("Échec de la suppression sur le serveur", "danger")
+                                 }
+                               } catch (e) {
+                                 showToast("Serveur injoignable.", "danger")
+                               }
+                             }}>Supprimer</button>
                           </div>
                         </div>
                       </div>
@@ -1085,7 +1098,7 @@ function App() {
                       type="button"
                       className="btn-primary"
                       style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }}
-                      onClick={() => {
+                      onClick={async () => {
                         const manager = employees.find(e => e.name === projetFormData.responsableChantier);
                         let finalIntervenants = [...projetIntervenants];
                         if (manager && !finalIntervenants.some(i => i.matricule === manager.matricule)) {
@@ -1158,21 +1171,30 @@ function App() {
                             <div style={{ fontWeight: '800', fontSize: '1.2rem', color: 'var(--primary)' }}>{c.numeroCaisse}</div>
                           </div>
                           <button className="btn-icon" onClick={async () => {
-                            const updated = caisses.filter((_, idx) => idx !== i);
-                            setCaisses(updated);
-                            localStorage.setItem('gp_caisses_v1', JSON.stringify(updated));
-                            showToast('Caisse supprimée');
+                             if (!isOnline) {
+                               showToast("Connexion internet requise pour supprimer", "danger")
+                               return
+                             }
+                             try {
+                               showToast("Suppression caisse...", "info")
+                               const { CapacitorHttp } = await import('@capacitor/core')
+                               const res = await CapacitorHttp.delete({ 
+                                 url: `${API_URL}/caisses/${c.numeroCaisse}`,
+                                 connectTimeout: 8000 
+                               })
 
-                            if (isProd && isOnline) {
-                              try {
-                                const { CapacitorHttp } = await import('@capacitor/core')
-                                await CapacitorHttp.delete({ 
-                                  url: `${API_URL}/caisses/${c.numeroCaisse}`,
-                                  connectTimeout: 5000 
-                                })
-                              } catch (e) {}
-                            }
-                          }} style={{ color: 'var(--danger)' }}>🗑</button>
+                               if (res.status === 200) {
+                                 const updated = caisses.filter((_, idx) => idx !== i);
+                                 setCaisses(updated);
+                                 localStorage.setItem('gp_caisses_v1', JSON.stringify(updated));
+                                 showToast('Caisse supprimée du serveur');
+                               } else {
+                                 showToast("Échec serveur lors de la suppression", "danger")
+                               }
+                             } catch (e) {
+                               showToast("Serveur injoignable.", "danger")
+                             }
+                           }} style={{ color: 'var(--danger)' }}>🗑</button>
                         </div>
                         <div style={{ marginBottom: '1rem' }}>
                           <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px' }}>Affecté à</div>
@@ -1526,31 +1548,43 @@ function App() {
                         ))}
                       </div>
                     </div>
-                    <button type="button" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} onClick={() => {
+                    <button type="button" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} onClick={async () => {
                       const manager = employees.find(e => e.name === projetFormData.responsableChantier);
                       let finalIntervenants = [...projetIntervenants];
                       if (manager && !finalIntervenants.some(i => i.matricule === manager.matricule)) {
                         finalIntervenants.push({ matricule: manager.matricule, name: manager.name, role: manager.role });
                       }
-                      setProjets(updated)
-                      localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
-                      setProjetView('projet')
-                      setProjetWizardStep(1)
-                      showToast('Projet mis a jour')
 
-                      if (isProd && isOnline) {
-                        const saveUpdate = async () => {
-                          try {
-                            const { CapacitorHttp } = await import('@capacitor/core')
-                            await CapacitorHttp.post({ 
-                              url: `${API_URL}/projets`, 
-                              headers: { 'Content-Type': 'application/json' }, 
-                              data: updated[selectedProjetIndex],
-                              connectTimeout: 5000 
-                            })
-                          } catch (e) {}
+                      if (!isOnline) {
+                        showToast("Connexion internet requise pour mettre à jour", "danger")
+                        return
+                      }
+
+                      const updatedProjet = { ...projetFormData, intervenants: finalIntervenants, dateCreation: projets[selectedProjetIndex].dateCreation }
+                      const updatedList = [...projets]
+                      updatedList[selectedProjetIndex] = updatedProjet
+
+                      try {
+                        showToast("Mise à jour sur le serveur...", "info")
+                        const { CapacitorHttp } = await import('@capacitor/core')
+                        const res = await CapacitorHttp.post({ 
+                          url: `${API_URL}/projets`, 
+                          headers: { 'Content-Type': 'application/json' }, 
+                          data: updatedProjet,
+                          connectTimeout: 10000 
+                        })
+
+                        if (res.status === 200) {
+                          setProjets(updatedList)
+                          localStorage.setItem('gp_projets_v1', JSON.stringify(updatedList))
+                          setProjetView('projet')
+                          setProjetWizardStep(1)
+                          showToast('Projet mis à jour sur le serveur')
+                        } else {
+                          showToast("Échec de la mise à jour serveur", "danger")
                         }
-                        saveUpdate()
+                      } catch (e) {
+                        showToast("Serveur injoignable.", "danger")
                       }
                     }}>Enregistrer les modifications</button>
                   </div>
