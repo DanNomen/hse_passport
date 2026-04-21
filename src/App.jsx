@@ -406,7 +406,8 @@ function App() {
           console.error("Delete online failed:", e);
         }
       }
-
+      const updatedEmployees = employees.filter(e => e.matricule !== id)
+      setEmployees(updatedEmployees)
       localStorage.setItem(`hse_employees_v2${DB_PREFIX}`, JSON.stringify(updatedEmployees))
       showToast("Employé retiré", 'success')
       
