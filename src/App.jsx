@@ -58,6 +58,28 @@ function App() {
 
   // --- States ---
   const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem('hse_isAuthenticated') === 'true')
+
+  // --- Nettoyage du Stockage local (One-time) ---
+  useEffect(() => {
+    try {
+      const currentKeys = [
+        `hse_accounts_v3${DB_PREFIX}`,
+        `hse_employees_v3${DB_PREFIX}`,
+        'hse_isAuthenticated',
+        'hse_currentUser',
+        'hse_theme',
+        'hse_selectedHub',
+        'gp_projets_v1',
+        'gp_caisses_v1'
+      ];
+      // Supprimer les anciennes clés pour libérer de l'espace (QuotaExceededError fix)
+      const oldKeys = ['hse_employees', 'hse_employees_v2', 'hse_accounts_v1'];
+      oldKeys.forEach(k => localStorage.removeItem(k));
+    } catch (e) {
+      console.warn("Erreur lors du nettoyage du localStorage:", e);
+    }
+  }, [DB_PREFIX])
+
   const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('hse_currentUser') || 'null'))
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('hse_theme');
@@ -163,6 +185,9 @@ function App() {
           }
         } catch (err) {
           console.error("Erreur chargement initial:", err)
+          if (err.message?.includes('UNREACHABLE')) {
+            showToast("Le serveur de production est temporairement injoignable.", "danger")
+          }
         }
       }
     }
@@ -170,8 +195,14 @@ function App() {
   }, [isProd, isAuthenticated, API_URL, DB_PREFIX])
 
   useEffect(() => {
-    localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(employees))
-    localStorage.setItem(`hse_accounts_v3${DB_PREFIX}`, JSON.stringify(accounts))
+    try {
+      localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(employees))
+      localStorage.setItem(`hse_accounts_v3${DB_PREFIX}`, JSON.stringify(accounts))
+    } catch (e) {
+      if (e.name === 'QuotaExceededError') {
+        console.error("Espace de stockage local saturé !");
+      }
+    }
   }, [employees, accounts, DB_PREFIX])
 
   useEffect(() => {
@@ -215,10 +246,6 @@ function App() {
     }
   }, [])
 
-  // Handlers
-  useEffect(() => {
-    localStorage.setItem('hse_employees', JSON.stringify(employees))
-  }, [employees])
 
   useEffect(() => {
     const handleStatusChange = () => setIsOnline(navigator.onLine)
