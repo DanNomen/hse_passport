@@ -252,25 +252,15 @@ function App() {
     window.addEventListener('online', handleStatusChange)
     window.addEventListener('offline', handleStatusChange)
 
-    let interval;
-    if (isProd && isAuthenticated) {
-      interval = setInterval(() => {
-        if (isOnline && !isSyncing) {
-          syncData(true)
-        }
-      }, 5 * 60 * 1000)
-    }
-
     return () => {
       window.removeEventListener('online', handleStatusChange)
       window.removeEventListener('offline', handleStatusChange)
-      if (interval) clearInterval(interval)
     }
   }, [isProd, isAuthenticated, isOnline, isSyncing])
 
-  const syncData = async (silent = false) => {
+  const syncData = async () => {
     if (!isOnline) {
-      if (!silent) showToast("Pas de connexion internet", "error")
+      showToast("Pas de connexion internet", "danger")
       return
     }
 
@@ -297,10 +287,10 @@ function App() {
         localStorage.setItem('gp_caisses_v1', JSON.stringify(resCaisse.data.caisses))
       }
 
-      if (!silent) showToast("Mise à jour système terminée !")
+      showToast("Données synchronisées avec le serveur")
     } catch (err) {
       console.error(err)
-      if (!silent) showToast("Erreur de synchronisation", "danger")
+      showToast("Erreur de connexion au serveur", "danger")
     } finally {
       setIsSyncing(false)
     }
@@ -356,22 +346,34 @@ function App() {
 
   const handleAccountCreate = async (e) => {
     e.preventDefault()
-    if (isProd && isOnline) {
-      try {
-        const { CapacitorHttp } = await import('@capacitor/core')
-        await CapacitorHttp.post({
-          url: `${API_URL}/accounts`,
-          headers: { 'Content-Type': 'application/json' },
-          data: newAccountFormData
-        })
-      } catch (err) {
-        console.error('API Error Create Account:', err);
-      }
+    
+    if (!isOnline) {
+      showToast("Connexion requise pour créer un compte", "danger")
+      return
     }
 
-    setAccounts(prev => [...prev, newAccountFormData])
-    showToast("Nouveau compte créé")
-    setNewAccountFormData({ email: '', password: '', role: 'Visiteur' })
+    const accountData = { ...newAccountFormData }
+    
+    try {
+      showToast("Création du compte en cours...", "info")
+      const { CapacitorHttp } = await import('@capacitor/core')
+      const res = await CapacitorHttp.post({
+        url: `${API_URL}/accounts`,
+        headers: { 'Content-Type': 'application/json' },
+        data: accountData,
+        connectTimeout: 10000
+      })
+
+      if (res.status === 200) {
+        setAccounts(prev => [...prev, accountData])
+        showToast("Compte créé avec succès sur le serveur")
+        setNewAccountFormData({ email: '', password: '', role: 'Visiteur' })
+      } else {
+        showToast("Erreur lors de la création sur le serveur", "danger")
+      }
+    } catch (err) {
+      showToast("Serveur injoignable. Action annulée.", "danger")
+    }
   }
 
   const handleAccountDelete = async (email) => {
@@ -379,34 +381,46 @@ function App() {
   }
 
   const executeDelete = async () => {
-    if (confirmDialog.type === 'account') {
-      const email = confirmDialog.item.email;
-      if (isProd && isOnline) {
-        try {
-          const { CapacitorHttp } = await import('@capacitor/core')
-          await CapacitorHttp.delete({ url: `${API_URL}/accounts/${email}` })
-        } catch (err) {}
-      }
-      setAccounts(prev => prev.filter(a => a.email !== email))
-      showToast("Le compte a été retiré")
-
-    } else if (confirmDialog.type === 'employee') {
-      const id = confirmDialog.item.matricule;
-
-      if (isProd && isOnline) {
-        try {
-          const { CapacitorHttp } = await import('@capacitor/core')
-          await CapacitorHttp.delete({ url: `${API_URL}/employees/${id}` })
-        } catch (e) {}
-      }
-
-      const updatedEmployees = employees.filter(e => e.matricule !== id)
-      setEmployees(updatedEmployees)
-      localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(updatedEmployees))
-      showToast("Employé retiré", 'success')
-
-      syncData(true)
+    const dialogType = confirmDialog.type
+    const dialogItem = confirmDialog.item
+    
+    if (!isOnline) {
+      showToast("Connexion requise pour supprimer sur le serveur", "danger")
+      return
     }
+
+    try {
+      showToast("Suppression en cours...", "info")
+      const { CapacitorHttp } = await import('@capacitor/core')
+
+      if (dialogType === 'account') {
+        const email = dialogItem.email;
+        const res = await CapacitorHttp.delete({ url: `${API_URL}/accounts/${email}`, connectTimeout: 8000 })
+        
+        if (res.status === 200) {
+          setAccounts(prev => prev.filter(a => a.email !== email))
+          showToast("Compte retiré du serveur")
+        } else {
+          showToast("Échec de la suppression sur le serveur", "danger")
+        }
+
+      } else if (dialogType === 'employee') {
+        const id = dialogItem.matricule;
+        const res = await CapacitorHttp.delete({ url: `${API_URL}/employees/${id}`, connectTimeout: 8000 })
+
+        if (res.status === 200) {
+          const updatedEmployees = employees.filter(e => e.matricule !== id)
+          setEmployees(updatedEmployees)
+          localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(updatedEmployees))
+          showToast("Employé retiré du serveur")
+        } else {
+          showToast("Échec de la suppression sur le serveur", "danger")
+        }
+      }
+    } catch (e) {
+      showToast("Le serveur est injoignable.", "danger")
+    }
+
     setConfirmDialog({ isOpen: false, item: null, type: '' });
   }
 
@@ -420,6 +434,12 @@ function App() {
 
   const saveEmployee = async (e) => {
     e.preventDefault()
+    
+    if (!isOnline) {
+      showToast("Vous devez être connecté pour enregistrer sur la Prod", "danger")
+      return
+    }
+
     const compliance = calculateCompliance(formData.certifications)
     const newEmp = {
       ...formData,
@@ -429,29 +449,34 @@ function App() {
       matricule: formData.matricule || `HSE-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 900) + 100}-PX`
     }
 
-    if (isProd && isOnline) {
-      try {
-        const { CapacitorHttp } = await import('@capacitor/core')
-        await CapacitorHttp.post({
-          url: `${API_URL}/employees`,
-          headers: { 'Content-Type': 'application/json' },
-          data: newEmp
-        })
-      } catch (err) {
-        console.error("Save online failed:", err)
+    try {
+      showToast("Envoi au serveur de production...", "info")
+      const { CapacitorHttp } = await import('@capacitor/core')
+      const res = await CapacitorHttp.post({
+        url: `${API_URL}/employees`,
+        headers: { 'Content-Type': 'application/json' },
+        data: newEmp,
+        connectTimeout: 12000
+      })
+
+      if (res.status === 200) {
+        const updatedEmployees = employeeView === 'edit'
+          ? employees.map(emp => emp.matricule === selectedEmployee.matricule ? newEmp : emp)
+          : [newEmp, ...employees]
+
+        setEmployees(updatedEmployees)
+        localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(updatedEmployees))
+
+        showToast("Données enregistrées directement sur le serveur !")
+        setEmployeeView('list')
+        setFormData({ firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true, epis: { gants: { checked: false, date: '' }, chaussures: { checked: false, date: '' }, casques: { checked: false, date: '' }, uniforme: { checked: false, date: '' }, gillet: { checked: false, date: '' } } })
+      } else {
+        showToast("Erreur serveur: " + (res.data?.message || "Indéterminée"), "danger")
       }
+    } catch (err) {
+      console.error("Save online failed:", err)
+      showToast("Impossible de joindre le serveur. Données non sauvegardées.", "danger")
     }
-
-    const updatedEmployees = employeeView === 'edit'
-      ? employees.map(emp => emp.matricule === selectedEmployee.matricule ? newEmp : emp)
-      : [newEmp, ...employees]
-
-    setEmployees(updatedEmployees)
-    localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(updatedEmployees))
-
-    showToast(employeeView === 'edit' ? "Mise à jour réussie" : "Nouvel arrivant enregistré")
-    setEmployeeView('list')
-    setFormData({ firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true, epis: { gants: { checked: false, date: '' }, chaussures: { checked: false, date: '' }, casques: { checked: false, date: '' }, uniforme: { checked: false, date: '' }, gillet: { checked: false, date: '' } } })
   }
 
   const resetProjetForm = () => {
@@ -1066,33 +1091,40 @@ function App() {
                         if (manager && !finalIntervenants.some(i => i.matricule === manager.matricule)) {
                           finalIntervenants.push({ matricule: manager.matricule, name: manager.name, role: manager.role });
                         }
+                        if (!isOnline) {
+                          showToast("Connexion internet requise pour créer un projet", "danger")
+                          return
+                        }
+
                         const newProjet = {
                           ...projetFormData,
                           intervenants: finalIntervenants,
                           dateCreation: new Date().toLocaleDateString('fr-FR')
                         }
 
+                        try {
+                          showToast("Création du projet sur le serveur...", "info")
+                          const { CapacitorHttp } = await import('@capacitor/core')
+                          const res = await CapacitorHttp.post({
+                            url: `${API_URL}/projets`,
+                            headers: { 'Content-Type': 'application/json' },
+                            data: newProjet,
+                            connectTimeout: 10000
+                          })
 
-                        if (isProd && isOnline) {
-                          const saveProj = async () => {
-                            try {
-                              const { CapacitorHttp } = await import('@capacitor/core')
-                              await CapacitorHttp.post({
-                                url: `${API_URL}/projets`,
-                                headers: { 'Content-Type': 'application/json' },
-                                data: newProjet
-                              })
-                            } catch (e) {}
+                          if (res.status === 200) {
+                            const updated = [newProjet, ...projets]
+                            setProjets(updated)
+                            localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
+                            resetProjetForm()
+                            setProjetView('projet')
+                            showToast('Projet enregistré avec succès sur le serveur')
+                          } else {
+                            showToast("Échec de l'enregistrement sur le serveur", "danger")
                           }
-                          saveProj()
+                        } catch (e) {
+                          showToast("Serveur injoignable.", "danger")
                         }
-
-                        const updated = [newProjet, ...projets]
-                        setProjets(updated)
-                        localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
-                        resetProjetForm()
-                        setProjetView('projet')
-                        showToast('Projet enregistré avec succès')
                       }}
                     >Finaliser et Créer le Projet</button>
                   </div>
@@ -1130,6 +1162,16 @@ function App() {
                             setCaisses(updated);
                             localStorage.setItem('gp_caisses_v1', JSON.stringify(updated));
                             showToast('Caisse supprimée');
+
+                            if (isProd && isOnline) {
+                              try {
+                                const { CapacitorHttp } = await import('@capacitor/core')
+                                await CapacitorHttp.delete({ 
+                                  url: `${API_URL}/caisses/${c.numeroCaisse}`,
+                                  connectTimeout: 5000 
+                                })
+                              } catch (e) {}
+                            }
                           }} style={{ color: 'var(--danger)' }}>🗑</button>
                         </div>
                         <div style={{ marginBottom: '1rem' }}>
@@ -1224,11 +1266,33 @@ function App() {
                     style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }}
                     disabled={!caisseFormData.numeroCaisse}
                     onClick={async () => {
-                      const updated = [caisseFormData, ...caisses];
-                      setCaisses(updated);
-                      localStorage.setItem('gp_caisses_v1', JSON.stringify(updated));
-                      setProjetView('materiels');
-                      showToast('Caisse créée avec succès');
+                      if (!isOnline) {
+                        showToast("Connexion internet requise", "danger")
+                        return
+                      }
+
+                      try {
+                        showToast("Enregistrement caisse...", "info")
+                        const { CapacitorHttp } = await import('@capacitor/core')
+                        const res = await CapacitorHttp.post({
+                          url: `${API_URL}/caisses`,
+                          headers: { 'Content-Type': 'application/json' },
+                          data: caisseFormData,
+                          connectTimeout: 8000
+                        })
+
+                        if (res.status === 200) {
+                          const updated = [caisseFormData, ...caisses];
+                          setCaisses(updated);
+                          localStorage.setItem('gp_caisses_v1', JSON.stringify(updated));
+                          setProjetView('materiels');
+                          showToast('Caisse enregistrée sur le serveur');
+                        } else {
+                          showToast("Erreur serveur lors de la création", "danger")
+                        }
+                      } catch (e) {
+                        showToast("Serveur injoignable.", "danger")
+                      }
                     }}
                   >Enregistrer la Caisse</button>
                 </div>
@@ -1468,24 +1532,26 @@ function App() {
                       if (manager && !finalIntervenants.some(i => i.matricule === manager.matricule)) {
                         finalIntervenants.push({ matricule: manager.matricule, name: manager.name, role: manager.role });
                       }
-                      const updated = [...projets]
-                      updated[selectedProjetIndex] = { ...projetFormData, intervenants: finalIntervenants, dateCreation: projets[selectedProjetIndex].dateCreation }
-
-                      if (isProd && isOnline) {
-                        const saveUpdate = async () => {
-                          try {
-                            const { CapacitorHttp } = await import('@capacitor/core')
-                            await CapacitorHttp.post({ url: `${API_URL}/projets`, headers: { 'Content-Type': 'application/json' }, data: updated[selectedProjetIndex] })
-                          } catch (e) {}
-                        }
-                        saveUpdate()
-                      }
-
                       setProjets(updated)
                       localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
                       setProjetView('projet')
                       setProjetWizardStep(1)
                       showToast('Projet mis a jour')
+
+                      if (isProd && isOnline) {
+                        const saveUpdate = async () => {
+                          try {
+                            const { CapacitorHttp } = await import('@capacitor/core')
+                            await CapacitorHttp.post({ 
+                              url: `${API_URL}/projets`, 
+                              headers: { 'Content-Type': 'application/json' }, 
+                              data: updated[selectedProjetIndex],
+                              connectTimeout: 5000 
+                            })
+                          } catch (e) {}
+                        }
+                        saveUpdate()
+                      }
                     }}>Enregistrer les modifications</button>
                   </div>
                 )}
