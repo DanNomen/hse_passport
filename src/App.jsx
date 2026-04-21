@@ -57,8 +57,8 @@ function App() {
   const DB_PREFIX = '_prod' // Stable prefix for mobile production
 
   // --- States ---
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [currentUser, setCurrentUser] = useState(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem('hse_isAuthenticated') === 'true')
+  const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('hse_currentUser') || 'null'))
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('hse_theme');
     if (saved) return saved;
@@ -91,7 +91,7 @@ function App() {
   })
   const [draftCert, setDraftCert] = useState({ name: '', dateObtention: '', validite: '', dateExpiration: '' })
   const [newAccountFormData, setNewAccountFormData] = useState({ email: '', password: '', role: 'Visiteur' })
-  const [selectedHub, setSelectedHub] = useState(null)
+  const [selectedHub, setSelectedHub] = useState(() => localStorage.getItem('hse_selectedHub') || null)
   const [projetView, setProjetView] = useState('projet')
   const [projets, setProjets] = useState(() => {
     const saved = localStorage.getItem('gp_projets_v1')
@@ -321,6 +321,9 @@ function App() {
     const finalizeAuth = async (account) => {
       setCurrentUser(account)
       setIsAuthenticated(true)
+      localStorage.setItem('hse_isAuthenticated', 'true')
+      localStorage.setItem('hse_currentUser', JSON.stringify(account))
+      localStorage.setItem('hse_selectedHub', selectedHub)
     }
 
     if (isProd) {
@@ -657,7 +660,14 @@ function App() {
                   {currentUser?.role === 'Admin' && (
                     <button className={`btn-secondary nav-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => setEmployeeView('settings')}>Paramètres</button>
                   )}
-                  <button className={`btn-secondary nav-btn logout-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => { setIsAuthenticated(false); setCurrentUser(null); setSelectedHub(null); }}>Déconnexion</button>
+                  <button className={`btn-secondary nav-btn logout-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => { 
+                    setIsAuthenticated(false); 
+                    setCurrentUser(null); 
+                    setSelectedHub(null); 
+                    localStorage.removeItem('hse_isAuthenticated');
+                    localStorage.removeItem('hse_currentUser');
+                    localStorage.removeItem('hse_selectedHub');
+                  }}>Déconnexion</button>
                 </>
               ) : (
                 <>
@@ -678,7 +688,14 @@ function App() {
                   <span className="user-badge mobile-hide">
                     <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>{currentUser?.email}</span>
                   </span>
-                  <button className="btn-secondary nav-btn logout-btn" onClick={() => { setIsAuthenticated(false); setCurrentUser(null); setSelectedHub(null); }}>Déconnexion</button>
+                  <button className="btn-secondary nav-btn logout-btn" onClick={() => { 
+                    setIsAuthenticated(false); 
+                    setCurrentUser(null); 
+                    setSelectedHub(null); 
+                    localStorage.removeItem('hse_isAuthenticated');
+                    localStorage.removeItem('hse_currentUser');
+                    localStorage.removeItem('hse_selectedHub');
+                  }}>Déconnexion</button>
                 </>
               )}
             </>
@@ -747,7 +764,7 @@ function App() {
                     <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '1.5rem', lineHeight: '1.5' }}>Veuillez sélectionner l'environnement auquel vous souhaitez accéder.</p>
 
                     <button
-                      onClick={() => setSelectedHub('hse')}
+                      onClick={() => { setSelectedHub('hse'); localStorage.setItem('hse_selectedHub', 'hse'); }}
                       style={{ background: 'var(--card-bg-light)', border: '2px solid transparent', borderRadius: '12px', padding: '1.5rem', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.3s ease' }}
                     >
                       <div style={{ fontSize: '2rem' }}>🛡️</div>
@@ -758,7 +775,7 @@ function App() {
                     </button>
 
                     <button
-                      onClick={() => setSelectedHub('projet')}
+                      onClick={() => { setSelectedHub('projet'); localStorage.setItem('hse_selectedHub', 'projet'); }}
                       style={{ background: 'var(--card-bg-medium)', border: '2px solid transparent', borderRadius: '12px', padding: '1.5rem', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.3s ease' }}
                     >
                       <div style={{ fontSize: '2rem' }}>🏗️</div>
@@ -770,7 +787,7 @@ function App() {
                   </div>
                 ) : (
                   <div className="animate-slide-up">
-                    <button onClick={() => setSelectedHub(null)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 0, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+                    <button onClick={() => { setSelectedHub(null); localStorage.removeItem('hse_selectedHub'); }} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 0, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
                       <span>←</span> Retour au Hub
                     </button>
 
