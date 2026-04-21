@@ -229,11 +229,23 @@ function App() {
     const handleStatusChange = () => setIsOnline(navigator.onLine)
     window.addEventListener('online', handleStatusChange)
     window.addEventListener('offline', handleStatusChange)
+
+    // Auto-refresh every 5 minutes in production
+    let interval;
+    if (isProd && isAuthenticated) {
+      interval = setInterval(() => {
+        if (isOnline && !isSyncing) {
+          syncData()
+        }
+      }, 5 * 60 * 1000)
+    }
+
     return () => {
       window.removeEventListener('online', handleStatusChange)
       window.removeEventListener('offline', handleStatusChange)
+      if (interval) clearInterval(interval)
     }
-  }, [])
+  }, [isProd, isAuthenticated, isOnline, isSyncing])
 
   const syncData = async () => {
     if (!isOnline) {
@@ -245,40 +257,7 @@ function App() {
     try {
       const { CapacitorHttp } = await import('@capacitor/core')
 
-      // 1. PUSH Employees
-      for (const employee of employees) {
-        try {
-          await CapacitorHttp.post({
-            url: `${API_URL}/employees`,
-            headers: { 'Content-Type': 'application/json' },
-            data: employee
-          })
-        } catch (e) {}
-      }
-
-      // 2. PUSH Projects
-      for (const p of projets) {
-        try {
-          await CapacitorHttp.post({
-             url: `${API_URL}/projets`,
-             headers: { 'Content-Type': 'application/json' },
-             data: p
-          })
-        } catch (e) {}
-      }
-
-      // 3. PUSH Caisses
-      for (const c of caisses) {
-        try {
-          await CapacitorHttp.post({
-            url: `${API_URL}/caisses`,
-            headers: { 'Content-Type': 'application/json' },
-            data: c
-          })
-        } catch (e) {}
-      }
-
-      // 4. PULL ALL
+      // --- PULL EVERYTHING (Source of Truth) ---
       const [resEmp, resProj, resCaisse] = await Promise.all([
         CapacitorHttp.get({ url: `${API_URL}/employees` }),
         CapacitorHttp.get({ url: `${API_URL}/projets` }),
@@ -298,7 +277,7 @@ function App() {
         localStorage.setItem('gp_caisses_v1', JSON.stringify(resCaisse.data.caisses))
       }
 
-      showToast("Mise à jour globale terminée !")
+      showToast("Mise à jour système terminée !")
     } catch (err) {
       console.error(err)
       showToast("Erreur de synchronisation", "danger")
@@ -428,10 +407,11 @@ function App() {
         }
       }
 
-      const updatedEmployees = employees.filter(e => e.matricule !== id)
-      setEmployees(updatedEmployees)
       localStorage.setItem(`hse_employees_v2${DB_PREFIX}`, JSON.stringify(updatedEmployees))
       showToast("Employé retiré", 'success')
+      
+      // Auto-sync after delete to refresh everyone else (if possible)
+      syncData()
     }
     setConfirmDialog({ isOpen: false, item: null, type: '' });
   }
