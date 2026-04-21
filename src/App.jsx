@@ -52,6 +52,10 @@ const getStatusLabel = (comp) => {
 }
 
 function App() {
+  const isProd = true // Activé pour la collaboration
+  const API_URL = 'http://46.105.75.234:3009/api'.trim()
+  const DB_PREFIX = '_prod'
+
   // --- States ---
   const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem('hse_isAuthenticated') === 'true')
   const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('hse_currentUser') || 'null'))
@@ -62,14 +66,16 @@ function App() {
   })
 
   const [accounts, setAccounts] = useState(() => {
-    const saved = localStorage.getItem('hse_accounts_v1')
+    const saved = localStorage.getItem(`hse_accounts_v3${DB_PREFIX}`)
     return saved ? JSON.parse(saved) : INITIAL_ACCOUNTS
   })
 
   const [employees, setEmployees] = useState(() => {
-    const saved = localStorage.getItem('hse_employees_v2')
+    const saved = localStorage.getItem(`hse_employees_v3${DB_PREFIX}`)
     return saved ? JSON.parse(saved) : INITIAL_EMPLOYEES
   })
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [employeeView, setEmployeeView] = useState('list')
   const [showHeader, setShowHeader] = useState(true)
   const [lastScrollY, setLastScrollY] = useState(0)
@@ -106,10 +112,67 @@ function App() {
   const [newMateriel, setNewMateriel] = useState('')
   const [previousView, setPreviousView] = useState(null)
 
+  // Modal State
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, item: null, type: '' })
+
+  // Chargement initial des données depuis le serveur en mode Prod
   useEffect(() => {
-    localStorage.setItem('hse_employees_v2', JSON.stringify(employees))
-    localStorage.setItem('hse_accounts_v1', JSON.stringify(accounts))
-  }, [employees, accounts])
+    const fetchInitialData = async () => {
+      if (isProd && isAuthenticated) {
+        try {
+          const { CapacitorHttp } = await import('@capacitor/core')
+
+          // Récupérer les comptes
+          const resAcc = await CapacitorHttp.get({
+            url: `${API_URL}/accounts`,
+            connectTimeout: 30000
+          })
+          if (resAcc.status === 200 && resAcc.data.success) {
+            setAccounts(resAcc.data.accounts)
+            localStorage.setItem(`hse_accounts_v3${DB_PREFIX}`, JSON.stringify(resAcc.data.accounts))
+          }
+
+          // Récupérer les employés
+          const resEmp = await CapacitorHttp.get({
+            url: `${API_URL}/employees`,
+            connectTimeout: 30000
+          })
+          if (resEmp.status === 200 && resEmp.data.success) {
+            setEmployees(resEmp.data.employees)
+            localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(resEmp.data.employees))
+          }
+
+          // Récupérer les projets
+          const resProj = await CapacitorHttp.get({
+            url: `${API_URL}/projets`,
+            connectTimeout: 30000
+          })
+          if (resProj.status === 200 && resProj.data.success) {
+            setProjets(resProj.data.projets)
+            localStorage.setItem('gp_projets_v1', JSON.stringify(resProj.data.projets))
+          }
+
+          // Récupérer les caisses
+          const resCaisse = await CapacitorHttp.get({
+            url: `${API_URL}/caisses`,
+            connectTimeout: 30000
+          })
+          if (resCaisse.status === 200 && resCaisse.data.success) {
+            setCaisses(resCaisse.data.caisses)
+            localStorage.setItem('gp_caisses_v1', JSON.stringify(resCaisse.data.caisses))
+          }
+        } catch (err) {
+          console.error("Erreur chargement initial:", err)
+        }
+      }
+    }
+    fetchInitialData()
+  }, [isProd, isAuthenticated, API_URL, DB_PREFIX])
+
+  useEffect(() => {
+    localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(employees))
+    localStorage.setItem(`hse_accounts_v3${DB_PREFIX}`, JSON.stringify(accounts))
+  }, [employees, accounts, DB_PREFIX])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -140,10 +203,81 @@ function App() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [lastScrollY])
 
+  // Notification de l'état de la connexion Internet
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
   // Handlers
   useEffect(() => {
     localStorage.setItem('hse_employees', JSON.stringify(employees))
   }, [employees])
+
+  useEffect(() => {
+    const handleStatusChange = () => setIsOnline(navigator.onLine)
+    window.addEventListener('online', handleStatusChange)
+    window.addEventListener('offline', handleStatusChange)
+
+    let interval;
+    if (isProd && isAuthenticated) {
+      interval = setInterval(() => {
+        if (isOnline && !isSyncing) {
+          syncData(true)
+        }
+      }, 5 * 60 * 1000)
+    }
+
+    return () => {
+      window.removeEventListener('online', handleStatusChange)
+      window.removeEventListener('offline', handleStatusChange)
+      if (interval) clearInterval(interval)
+    }
+  }, [isProd, isAuthenticated, isOnline, isSyncing])
+
+  const syncData = async (silent = false) => {
+    if (!isOnline) {
+      if (!silent) showToast("Pas de connexion internet", "error")
+      return
+    }
+
+    setIsSyncing(true)
+    try {
+      const { CapacitorHttp } = await import('@capacitor/core')
+
+      const [resEmp, resProj, resCaisse] = await Promise.all([
+        CapacitorHttp.get({ url: `${API_URL}/employees` }),
+        CapacitorHttp.get({ url: `${API_URL}/projets` }),
+        CapacitorHttp.get({ url: `${API_URL}/caisses` })
+      ])
+
+      if (resEmp.status === 200 && resEmp.data.success) {
+        setEmployees(resEmp.data.employees)
+        localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(resEmp.data.employees))
+      }
+      if (resProj.status === 200 && resProj.data.success) {
+        setProjets(resProj.data.projets)
+        localStorage.setItem('gp_projets_v1', JSON.stringify(resProj.data.projets))
+      }
+      if (resCaisse.status === 200 && resCaisse.data.success) {
+        setCaisses(resCaisse.data.caisses)
+        localStorage.setItem('gp_caisses_v1', JSON.stringify(resCaisse.data.caisses))
+      }
+
+      if (!silent) showToast("Mise à jour système terminée !")
+    } catch (err) {
+      console.error(err)
+      if (!silent) showToast("Erreur de synchronisation", "danger")
+    } finally {
+      setIsSyncing(false)
+    }
+  }
 
   const showToast = (message, type = 'success') => {
     const id = Date.now()
@@ -164,6 +298,25 @@ function App() {
       localStorage.setItem('hse_selectedHub', selectedHub)
     }
 
+    if (isProd && isOnline) {
+      try {
+        const { CapacitorHttp } = await import('@capacitor/core')
+        const res = await CapacitorHttp.post({
+          url: `${API_URL}/login`,
+          headers: { 'Content-Type': 'application/json' },
+          data: { email: emailInput, password: passwordInput },
+          connectTimeout: 5000
+        })
+
+        if (res.status === 200 && res.data.success) {
+          finalizeAuth(res.data.account)
+          return
+        }
+      } catch (err) {
+        console.warn("Mode local activé (erreur login)")
+      }
+    }
+
     const scopeAccounts = selectedHub === 'projet' ? PROJET_ACCOUNTS : [...accounts, ...INITIAL_ACCOUNTS]
     const acc = scopeAccounts.find(a => a.email.toLowerCase() === emailInput && a.password === passwordInput)
 
@@ -176,11 +329,18 @@ function App() {
 
   const handleAccountCreate = async (e) => {
     e.preventDefault()
-    if (accounts.some(a => a.email === newAccountFormData.email)) {
-      showToast("Ce compte existe déjà", "danger")
-      return;
+    if (isProd && isOnline) {
+      try {
+        const { CapacitorHttp } = await import('@capacitor/core')
+        await CapacitorHttp.post({
+          url: `${API_URL}/accounts`,
+          headers: { 'Content-Type': 'application/json' },
+          data: newAccountFormData
+        })
+      } catch (err) {
+        console.error('API Error Create Account:', err);
+      }
     }
-
 
     setAccounts(prev => [...prev, newAccountFormData])
     showToast("Nouveau compte créé")
@@ -194,17 +354,31 @@ function App() {
   const executeDelete = async () => {
     if (confirmDialog.type === 'account') {
       const email = confirmDialog.item.email;
+      if (isProd && isOnline) {
+        try {
+          const { CapacitorHttp } = await import('@capacitor/core')
+          await CapacitorHttp.delete({ url: `${API_URL}/accounts/${email}` })
+        } catch (err) {}
+      }
       setAccounts(prev => prev.filter(a => a.email !== email))
       showToast("Le compte a été retiré")
 
     } else if (confirmDialog.type === 'employee') {
       const id = confirmDialog.item.matricule;
 
+      if (isProd && isOnline) {
+        try {
+          const { CapacitorHttp } = await import('@capacitor/core')
+          await CapacitorHttp.delete({ url: `${API_URL}/employees/${id}` })
+        } catch (e) {}
+      }
+
       const updatedEmployees = employees.filter(e => e.matricule !== id)
       setEmployees(updatedEmployees)
-      localStorage.setItem('hse_employees_v2', JSON.stringify(updatedEmployees))
+      localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(updatedEmployees))
       showToast("Employé retiré", 'success')
 
+      syncData(true)
     }
     setConfirmDialog({ isOpen: false, item: null, type: '' });
   }
@@ -228,13 +402,25 @@ function App() {
       matricule: formData.matricule || `HSE-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 900) + 100}-PX`
     }
 
+    if (isProd && isOnline) {
+      try {
+        const { CapacitorHttp } = await import('@capacitor/core')
+        await CapacitorHttp.post({
+          url: `${API_URL}/employees`,
+          headers: { 'Content-Type': 'application/json' },
+          data: newEmp
+        })
+      } catch (err) {
+        console.error("Save online failed:", err)
+      }
+    }
 
     const updatedEmployees = employeeView === 'edit'
       ? employees.map(emp => emp.matricule === selectedEmployee.matricule ? newEmp : emp)
       : [newEmp, ...employees]
 
     setEmployees(updatedEmployees)
-    localStorage.setItem('hse_employees_v2', JSON.stringify(updatedEmployees))
+    localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(updatedEmployees))
 
     showToast(employeeView === 'edit' ? "Mise à jour réussie" : "Nouvel arrivant enregistré")
     setEmployeeView('list')
@@ -396,6 +582,7 @@ function App() {
         </div>
 
         <div className="nav-actions">
+          {isProd && <span className="mobile-hide" style={{ color: 'var(--accent)', fontSize: '0.75rem', fontWeight: 'bold', marginRight: '1rem' }}>🟢 PROD DB</span>}
           <button className="btn-icon" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
@@ -404,6 +591,15 @@ function App() {
             <>
               {selectedHub === 'hse' ? (
                 <>
+                  <button
+                    className="btn-icon"
+                    onClick={() => syncData()}
+                    disabled={isSyncing}
+                    style={{ color: isOnline ? 'var(--accent)' : 'var(--text-dim)', marginRight: '10px' }}
+                    title="Synchroniser avec le serveur"
+                  >
+                    <span className={isSyncing ? 'animate-spin' : ''} style={{ display: 'inline-block' }}>☁️</span>
+                  </button>
                   <span className="user-badge">
                     <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>{currentUser?.email}</span>&nbsp;({currentUser?.role})
                   </span>
@@ -422,6 +618,15 @@ function App() {
                 </>
               ) : (
                 <>
+                  <button
+                    className="btn-icon"
+                    onClick={() => syncData()}
+                    disabled={isSyncing}
+                    style={{ color: isOnline ? '#3b82f6' : 'var(--text-dim)', marginRight: '10px' }}
+                    title="Actualiser les données"
+                  >
+                    <span className={isSyncing ? 'animate-spin' : ''} style={{ display: 'inline-block' }}>☁️</span>
+                  </button>
                   <button className={`btn-secondary nav-btn`} style={{ color: projetView === 'projet' ? '#3b82f6' : '' }} onClick={() => setProjetView('projet')}>Projet</button>
                   <button className={`btn-secondary nav-btn`} style={{ color: projetView === 'materiels' ? '#3b82f6' : '' }} onClick={() => setProjetView('materiels')}>Matériels</button>
                   {currentUser?.role === 'Admin' && (
@@ -638,6 +843,12 @@ function App() {
                               setProjetView('editProjet')
                             }}>Modifier</button>
                             <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', color: 'var(--danger)' }} onClick={async () => {
+                              if (isProd && isOnline) {
+                                try {
+                                  const { CapacitorHttp } = await import('@capacitor/core')
+                                  await CapacitorHttp.delete({ url: `${API_URL}/projets/${p.nomChantier}` })
+                                } catch (e) {}
+                              }
                               const updated = projets.filter((_, idx) => idx !== i)
                               setProjets(updated)
                               localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
@@ -834,6 +1045,20 @@ function App() {
                           dateCreation: new Date().toLocaleDateString('fr-FR')
                         }
 
+
+                        if (isProd && isOnline) {
+                          const saveProj = async () => {
+                            try {
+                              const { CapacitorHttp } = await import('@capacitor/core')
+                              await CapacitorHttp.post({
+                                url: `${API_URL}/projets`,
+                                headers: { 'Content-Type': 'application/json' },
+                                data: newProjet
+                              })
+                            } catch (e) {}
+                          }
+                          saveProj()
+                        }
 
                         const updated = [newProjet, ...projets]
                         setProjets(updated)
@@ -1218,6 +1443,17 @@ function App() {
                       }
                       const updated = [...projets]
                       updated[selectedProjetIndex] = { ...projetFormData, intervenants: finalIntervenants, dateCreation: projets[selectedProjetIndex].dateCreation }
+
+                      if (isProd && isOnline) {
+                        const saveUpdate = async () => {
+                          try {
+                            const { CapacitorHttp } = await import('@capacitor/core')
+                            await CapacitorHttp.post({ url: `${API_URL}/projets`, headers: { 'Content-Type': 'application/json' }, data: updated[selectedProjetIndex] })
+                          } catch (e) {}
+                        }
+                        saveUpdate()
+                      }
+
                       setProjets(updated)
                       localStorage.setItem('gp_projets_v1', JSON.stringify(updated))
                       setProjetView('projet')
