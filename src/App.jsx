@@ -83,7 +83,7 @@ function App() {
                 const lightData = data.map(emp => ({ ...emp, avatar: null }));
                 localStorage.setItem(key, JSON.stringify(lightData));
               } catch (e3) {
-                localStorage.removeItem(key); 
+                localStorage.removeItem(key);
               }
             }
           }
@@ -102,7 +102,7 @@ function App() {
     try {
       const oldKeys = ['hse_employees', 'hse_employees_v2', 'hse_accounts_v1'];
       oldKeys.forEach(k => localStorage.removeItem(k));
-    } catch (e) {}
+    } catch (e) { }
   }, [])
 
   const [currentUser, setCurrentUser] = useState(() => JSON.parse(safeStorage.getItem('hse_currentUser') || 'null'))
@@ -388,14 +388,14 @@ function App() {
 
   const handleAccountCreate = async (e) => {
     e.preventDefault()
-    
+
     if (!isOnline) {
       showToast("Connexion requise pour créer un compte", "danger")
       return
     }
 
     const accountData = { ...newAccountFormData }
-    
+
     try {
       showToast("Création du compte en cours...", "info")
       const res = await apiCall('POST', '/accounts', accountData)
@@ -419,7 +419,7 @@ function App() {
   const executeDelete = async () => {
     const dialogType = confirmDialog.type
     const dialogItem = confirmDialog.item
-    
+
     if (!isOnline) {
       showToast("Connexion requise pour supprimer sur le serveur", "danger")
       return
@@ -431,7 +431,7 @@ function App() {
       if (dialogType === 'account') {
         const email = dialogItem.email;
         const res = await apiCall('DELETE', `/accounts/${email}`)
-        
+
         if (res.status === 200) {
           setAccounts(prev => prev.filter(a => a.email !== email))
           showToast("Compte retiré du serveur")
@@ -469,7 +469,7 @@ function App() {
 
   const saveEmployee = async (e) => {
     e.preventDefault()
-    
+
     if (!isOnline) {
       showToast("Vous devez être connecté pour enregistrer sur la Prod", "danger")
       return
@@ -498,7 +498,7 @@ function App() {
 
         showToast("Données enregistrées directement sur le serveur !")
         setEmployeeView('list')
-        setFormData({ firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true, epis: { gants: { checked: false, date: '' }, chaussures: { checked: false, date: '' }, casques: { checked: false, date: '' }, uniforme: { checked: false, date: '' }, gillet: { checked: false, date: '' } } })
+        setFormData({ firstName: '', lastName: '', matricule: '', role: '', certifications: [], avatar: null, aptitudeMedicale: true, epis: { gants: { checked: false, date: '' }, chaussures: { checked: false, date: '' }, casques: { checked: false, date: '' }, uniforme: { checked: false, date: '' }, gillet: { checked: false, date: '' } } })
       } else {
         showToast("Erreur serveur: " + (res.data?.message || "Indéterminée"), "danger")
       }
@@ -924,26 +924,26 @@ function App() {
                               setProjetView('editProjet')
                             }}>Modifier</button>
                             <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', color: 'var(--danger)' }} onClick={async () => {
-                               if (!isOnline) {
-                                 showToast("Désolé, connexion internet requise pour supprimer", "danger")
-                                 return
-                               }
-                               try {
-                                 showToast("Suppression sur le serveur...", "info")
-                                 const res = await apiCall('DELETE', `/projets/${p.nomChantier}`)
-                                 
-                                 if (res.status === 200) {
-                                   const updated = projets.filter((_, idx) => idx !== i)
-                                   setProjets(updated)
-                                   safeStorage.setItem('gp_projets_v1', JSON.stringify(updated))
-                                   showToast('Projet supprimé du serveur')
-                                 } else {
-                                   showToast("Échec de la suppression sur le serveur", "danger")
-                                 }
-                               } catch (e) {
-                                 showToast(e.message, "danger")
-                               }
-                             }}>Supprimer</button>
+                              if (!isOnline) {
+                                showToast("Désolé, connexion internet requise pour supprimer", "danger")
+                                return
+                              }
+                              try {
+                                showToast("Suppression sur le serveur...", "info")
+                                const res = await apiCall('DELETE', `/projets/${p.nomChantier}`)
+
+                                if (res.status === 200) {
+                                  const updated = projets.filter((_, idx) => idx !== i)
+                                  setProjets(updated)
+                                  safeStorage.setItem('gp_projets_v1', JSON.stringify(updated))
+                                  showToast('Projet supprimé du serveur')
+                                } else {
+                                  showToast("Échec de la suppression sur le serveur", "danger")
+                                }
+                              } catch (e) {
+                                showToast(e.message, "danger")
+                              }
+                            }}>Supprimer</button>
                           </div>
                         </div>
                       </div>
@@ -1190,26 +1190,26 @@ function App() {
                             <div style={{ fontWeight: '800', fontSize: '1.2rem', color: 'var(--primary)' }}>{c.numeroCaisse}</div>
                           </div>
                           <button className="btn-icon" onClick={async () => {
-                             if (!isOnline) {
-                               showToast("Connexion internet requise pour supprimer", "danger")
-                               return
-                             }
-                             try {
-                               showToast("Suppression caisse...", "info")
-                               const res = await apiCall('DELETE', `/caisses/${c.numeroCaisse}`)
+                            if (!isOnline) {
+                              showToast("Connexion internet requise pour supprimer", "danger")
+                              return
+                            }
+                            try {
+                              showToast("Suppression caisse...", "info")
+                              const res = await apiCall('DELETE', `/caisses/${c.numeroCaisse}`)
 
-                               if (res.status === 200) {
-                                 const updated = caisses.filter((_, idx) => idx !== i);
-                                 setCaisses(updated);
-                                 safeStorage.setItem('gp_caisses_v1', JSON.stringify(updated));
-                                 showToast('Caisse supprimée du serveur');
-                               } else {
-                                 showToast("Échec serveur lors de la suppression", "danger")
-                               }
-                             } catch (e) {
-                               showToast(e.message, "danger")
-                             }
-                           }} style={{ color: 'var(--danger)' }}>🗑</button>
+                              if (res.status === 200) {
+                                const updated = caisses.filter((_, idx) => idx !== i);
+                                setCaisses(updated);
+                                safeStorage.setItem('gp_caisses_v1', JSON.stringify(updated));
+                                showToast('Caisse supprimée du serveur');
+                              } else {
+                                showToast("Échec serveur lors de la suppression", "danger")
+                              }
+                            } catch (e) {
+                              showToast(e.message, "danger")
+                            }
+                          }} style={{ color: 'var(--danger)' }}>🗑</button>
                         </div>
                         <div style={{ marginBottom: '1rem' }}>
                           <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px' }}>Affecté à</div>
@@ -1627,17 +1627,17 @@ function App() {
                   <StatCard label="Alertes Critiques" value={employees.filter(e => e.compliance < 60).length} color="danger" />
                 </div>
 
-                {/* Advanced Department Analytics */}
+                {/* Advanced Analytics by Role */}
                 <div className="glass-panel" style={{ padding: '2rem', marginBottom: '3rem' }}>
-                  <h3 style={{ fontSize: '1.1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>📊 Analyse par Département</h3>
+                  <h3 style={{ fontSize: '1.1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>📊 Analyse par Fonction</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem' }}>
-                    {[...new Set(employees.map(e => e.departement))].map(dept => {
-                      const deptEmps = employees.filter(e => e.departement === dept);
-                      const avgComp = Math.round(deptEmps.reduce((acc, e) => acc + e.compliance, 0) / (deptEmps.length || 1));
+                    {[...new Set(employees.map(e => e.role))].map(role => {
+                      const roleEmps = employees.filter(e => e.role === role);
+                      const avgComp = Math.round(roleEmps.reduce((acc, e) => acc + e.compliance, 0) / (roleEmps.length || 1));
                       return (
-                        <div key={dept}>
+                        <div key={role}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                            <span>{dept}</span>
+                            <span>{role}</span>
                             <span>{avgComp}%</span>
                           </div>
                           <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
@@ -1654,10 +1654,6 @@ function App() {
                     <h2>Liste des personnels</h2>
                     <div className="controls-group" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                       <button className="btn-secondary" onClick={exportCSV}>📥 CSV</button>
-                      <select className="glass-input" style={{ width: '160px' }} value={filterDept} onChange={e => setFilterDept(e.target.value)}>
-                        <option value="Tous">Tous Depts</option>
-                        {[...new Set(employees.map(e => e.departement))].map(d => <option key={d} value={d}>{d}</option>)}
-                      </select>
                       <input type="text" className="glass-input" placeholder="Rechercher..." style={{ width: '220px' }} value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                       {currentUser?.role === 'Admin' && (
                         <button className="btn-primary" onClick={() => { setFormData({ firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true, epis: { gants: { checked: false, date: '' }, chaussures: { checked: false, date: '' }, casques: { checked: false, date: '' }, uniforme: { checked: false, date: '' }, gillet: { checked: false, date: '' } } }); setEmployeeView('add') }}>+ Nouveau</button>
@@ -1667,7 +1663,7 @@ function App() {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     {employees
-                      .filter(e => (filterDept === 'Tous' || e.departement === filterDept) && (e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.matricule.toLowerCase().includes(searchTerm.toLowerCase())))
+                      .filter(e => (e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.matricule.toLowerCase().includes(searchTerm.toLowerCase())))
                       .map(e => <EmployeeRaw key={e.matricule} emp={e} />)}
                   </div>
                 </div>
@@ -1742,10 +1738,6 @@ function App() {
                   <div>
                     <label className="input-label">Prénom</label>
                     <input type="text" name="firstName" className="glass-input" value={formData.firstName} onChange={handleFormChange} required placeholder="Jean" />
-                  </div>
-                  <div>
-                    <label className="input-label">Département</label>
-                    <input type="text" name="departement" className="glass-input" value={formData.departement} onChange={handleFormChange} required placeholder="Exploitation" />
                   </div>
                   <div>
                     <label className="input-label">Fonction</label>
@@ -1933,7 +1925,7 @@ function App() {
                         { key: 'chaussures', label: 'Chaussures Sécu' },
                         { key: 'casques', label: 'Casque' },
                         { key: 'uniforme', label: 'Uniforme Manche L.' },
-                        { key: 'gillet', label: 'Gillet Cotton' }
+                        { key: 'gillet', label: 'Gilet Coton' }
                       ].map(({ key, label }) => {
                         const epiData = selectedEmployee.epis?.[key] || { checked: false, date: '' };
                         return (
@@ -1981,7 +1973,7 @@ function App() {
                                 <span style={{ color: '#1c4c8d', fontWeight: '700', fontSize: '10px', textTransform: 'uppercase' }}>Matricule:</span>
                                 <span style={{ fontWeight: '800', fontSize: '14px', color: '#334155', fontFamily: 'monospace' }}>{selectedEmployee.matricule}</span>
                               </div>
-                               <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
                                 <span style={{ color: '#1c4c8d', fontWeight: '700', fontSize: '10px', textTransform: 'uppercase' }}>FONCTION</span>
                                 <span style={{ fontWeight: '600', fontSize: '12px', color: '#64748b' }}>{selectedEmployee.role}</span>
                               </div>
