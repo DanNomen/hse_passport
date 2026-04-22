@@ -8,30 +8,30 @@
   --warning: #f59e0b;
   --warning-glow: rgba(245, 158, 11, 0.3);
   
-  /* DEFAULT DARK THEME */
+  /* DEFAULT DARK THEME - Opaque for comfort */
   --bg-deep: #020617;
-  --bg-card: rgba(15, 23, 42, 0.6);
+  --bg-card: #0f172a;
   --text-main: #f8fafc;
   --text-dim: #94a3b8;
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-shine: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shine: transparent;
   
-  --card-bg-light: rgba(255, 255, 255, 0.02);
-  --card-bg-medium: rgba(255, 255, 255, 0.03);
-  --card-bg-hover: rgba(255, 255, 255, 0.06);
-  --card-bg-nav: rgba(2, 6, 23, 0.8);
-  --input-bg: rgba(15, 23, 42, 0.4);
-  --input-bg-focus: rgba(15, 23, 42, 0.6);
-  --btn-icon-bg: rgba(255, 255, 255, 0.03);
-  --btn-icon-hover: rgba(255, 255, 255, 0.1);
+  --card-bg-light: #1e293b;
+  --card-bg-medium: #1e293b;
+  --card-bg-hover: #334155;
+  --card-bg-nav: #020617; /* Opaque header */
+  --input-bg: #1e293b;
+  --input-bg-focus: #334155;
+  --btn-icon-bg: #1e293b;
+  --btn-icon-hover: #334155;
   --btn-icon-hover-text: white;
   
-  --btn-secondary-bg: rgba(255, 255, 255, 0.05);
-  --btn-secondary-hover-bg: rgba(255, 255, 255, 0.1);
-  --btn-secondary-hover-border: rgba(255, 255, 255, 0.2);
+  --btn-secondary-bg: #1e293b;
+  --btn-secondary-hover-bg: #334155;
+  --btn-secondary-hover-border: #475569;
   
-  --bg-gradient-center: rgba(2, 6, 23, 1);
-  --bg-gradient-outer: rgba(2, 6, 23, 0.8);
+  --bg-gradient-center: #020617;
+  --bg-gradient-outer: #020617;
 
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --radius-xl: 24px;
@@ -41,18 +41,18 @@
 
 [data-theme='light'] {
   --bg-deep: #f1f5f9;
-  --bg-card: rgba(255, 255, 255, 0.8);
+  --bg-card: #ffffff;
   --text-main: #0f172a;
   --text-dim: #475569;
-  --glass-border: rgba(15, 23, 42, 0.1);
-  --glass-shine: rgba(15, 23, 42, 0.05);
-  --card-bg-light: rgba(255, 255, 255, 0.6);
-  --card-bg-medium: rgba(255, 255, 255, 0.8);
-  --card-bg-hover: rgba(255, 255, 255, 0.95);
-  --card-bg-nav: rgba(255, 255, 255, 0.8);
-  --input-bg: rgba(255, 255, 255, 0.8);
-  --bg-gradient-center: rgba(241, 245, 249, 1);
-  --bg-gradient-outer: rgba(241, 245, 249, 0.8);
+  --glass-border: #cbd5e1;
+  --glass-shine: transparent;
+  --card-bg-light: #ffffff;
+  --card-bg-medium: #ffffff;
+  --card-bg-hover: #f8fafc;
+  --card-bg-nav: #ffffff;
+  --input-bg: #ffffff;
+  --bg-gradient-center: #f1f5f9;
+  --bg-gradient-outer: #e2e8f0;
 }
 
 * {
@@ -68,9 +68,6 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   line-height: 1.5;
-  background-image: 
-    radial-gradient(circle at 100% 100%, rgba(99, 102, 241, 0.1) 0%, transparent 40%),
-    radial-gradient(circle at 50% 50%, var(--bg-gradient-center) 0%, var(--bg-gradient-outer) 100%);
   background-attachment: fixed;
 }
 
@@ -81,27 +78,24 @@ body {
   width: 100%;
 }
 
-/* Glassmorphism */
+/* Clean Solid Panels */
 .glass-panel {
   background: var(--bg-card);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-xl);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
 .glass-card {
   background: var(--card-bg-medium);
-  backdrop-filter: blur(10px);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   padding: 1.5rem;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s ease;
 }
 
 .glass-card:hover {
-  transform: translateY(-4px);
+  transform: translateY(-2px);
   background: var(--card-bg-hover);
 }
 
@@ -177,7 +171,6 @@ nav {
   top: 0;
   z-index: 1100;
   background: var(--card-bg-nav);
-  backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--glass-border);
   display: flex;
   justify-content: space-between;
