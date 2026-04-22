@@ -238,20 +238,10 @@ function App() {
     }
   }, [draftCert.dateObtention, draftCert.validite])
 
-  // Smart Header Logic
+  // Header is now permanent (scrolling logic removed for comfort)
   useEffect(() => {
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY
-      if (currentScrollY > lastScrollY && currentScrollY > 60) {
-        setShowHeader(false) // On descend -> cache le menu
-      } else {
-        setShowHeader(true) // On monte -> affiche le menu
-      }
-      setLastScrollY(currentScrollY)
-    }
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [lastScrollY])
+    setShowHeader(true)
+  }, [])
 
   // Notification de l'état de la connexion Internet
   useEffect(() => {
