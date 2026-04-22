@@ -442,7 +442,7 @@ function App() {
           setAccounts(prev => prev.filter(a => a.email !== email))
           showToast("Compte retiré du serveur")
         } else {
-          showToast("Échec de la suppression sur le serveur", "danger")
+          showToast("Échec: " + (res.data?.error || "Erreur serveur"), "danger")
         }
 
       } else if (dialogType === 'employee') {
@@ -455,7 +455,7 @@ function App() {
           localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(updatedEmployees))
           showToast("Employé retiré du serveur")
         } else {
-          showToast("Échec de la suppression sur le serveur", "danger")
+          showToast("Échec: " + (res.data?.error || "Erreur serveur"), "danger")
         }
       }
     } catch (e) {
@@ -948,7 +948,7 @@ function App() {
                                   safeStorage.setItem('gp_projets_v1', JSON.stringify(updated))
                                   showToast('Projet supprimé du serveur')
                                 } else {
-                                  showToast("Échec de la suppression sur le serveur", "danger")
+                                  showToast("Échec: " + (res.data?.error || "Erreur serveur"), "danger")
                                 }
                               } catch (e) {
                                 showToast(e.message, "danger")
@@ -1214,7 +1214,7 @@ function App() {
                                 safeStorage.setItem('gp_caisses_v1', JSON.stringify(updated));
                                 showToast('Caisse supprimée du serveur');
                               } else {
-                                showToast("Échec serveur lors de la suppression", "danger")
+                                showToast("Échec: " + (res.data?.error || "Erreur serveur"), "danger")
                               }
                             } catch (e) {
                               showToast(e.message, "danger")
