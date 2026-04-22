@@ -1999,6 +1999,10 @@ function App() {
                                 Aptitude : {selectedEmployee.aptitudeMedicale !== false ? '✅ APTE' : '❌ INAPTE'}
                               </div>
                             </div>
+                            
+                            <div style={{ marginTop: 'auto', textAlign: 'center', paddingBottom: '8px' }}>
+                              <div style={{ fontSize: '8px', color: '#94a3b8', fontWeight: '800' }}>☎ URGENCE HSE: 034 34 001 97 / 038 48 911 41</div>
+                            </div>
                           </div>
                         </div>
 
