@@ -1986,8 +1986,8 @@ function App() {
                                 <span style={{ fontWeight: '800', fontSize: '14px', color: '#334155', fontFamily: 'monospace' }}>{selectedEmployee.matricule}</span>
                               </div>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                                <span style={{ color: '#1c4c8d', fontWeight: '700', fontSize: '10px', textTransform: 'uppercase' }}>Département & Fonction</span>
-                                <span style={{ fontWeight: '600', fontSize: '12px', color: '#64748b' }}>{selectedEmployee.departement} • {selectedEmployee.role}</span>
+                                <span style={{ color: '#1c4c8d', fontWeight: '700', fontSize: '10px', textTransform: 'uppercase' }}>Fonction</span>
+                                <span style={{ fontWeight: '600', fontSize: '12px', color: '#64748b' }}>{selectedEmployee.role}</span>
                               </div>
                               <div style={{ background: selectedEmployee.aptitudeMedicale !== false ? '#dcfce7' : '#fee2e2', color: selectedEmployee.aptitudeMedicale !== false ? '#166534' : '#991b1b', padding: '6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '12px', textTransform: 'uppercase', marginTop: '5px' }}>
                                 Aptitude : {selectedEmployee.aptitudeMedicale !== false ? '✅ APTE' : '❌ INAPTE'}
