@@ -51,6 +51,22 @@ const getStatusLabel = (comp) => {
   return 'Critique'
 }
 
+const calculateProjectDuration = (startDate) => {
+  if (!startDate) return '0 jour';
+  const start = new Date(startDate);
+  const now = new Date();
+  
+  // Set to midnight to compare full days
+  start.setHours(0, 0, 0, 0);
+  now.setHours(0, 0, 0, 0);
+  
+  const diffTime = now.getTime() - start.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  
+  if (diffDays <= 0) return 'Début bientôt';
+  return `${diffDays} jour${diffDays > 1 ? 's' : ''}`;
+};
+
 function App() {
   const isProd = true // Activé pour la collaboration
   const API_URL = 'http://46.105.75.234:3009/api'.trim()
@@ -880,9 +896,13 @@ function App() {
                           <div>
                             <div style={{ fontWeight: '700', fontSize: '1.1rem' }}>{p.nomChantier}</div>
                             <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginTop: '0.25rem' }}>{p.lieu} — <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>Resp: {p.responsableChantier || 'N/A'}</span></div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem' }}>
-                              Début: {p.dateDebut} — {p.intervenants?.length || 0} intervenant(s)
-                              {p.outillageCaisse && <span style={{ marginLeft: '0.5rem', color: 'var(--primary)', fontWeight: 'bold' }}>• 📦 {p.outillageCaisse}</span>}
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span>Début: {p.dateDebut}</span>
+                              <span style={{ background: 'var(--primary-glow)', color: 'var(--primary)', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
+                                {calculateProjectDuration(p.dateDebut)}
+                              </span>
+                              <span>— {p.intervenants?.length || 0} intervenant(s)</span>
+                              {p.outillageCaisse && <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>• 📦 {p.outillageCaisse}</span>}
                             </div>
                           </div>
                           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
