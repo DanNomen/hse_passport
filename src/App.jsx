@@ -1919,10 +1919,6 @@ function App() {
                   <div className="glass-panel" style={{ padding: '2rem' }}>
                     <h3 style={{ fontSize: '1rem', marginBottom: '1.5rem' }}>Aperçu Technique</h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                      <div>
-                        <span className="input-label">Département</span>
-                        <div style={{ color: 'var(--text-main)' }}>{selectedEmployee.departement}</div>
-                      </div>
                       <div className="security-meter">
                         <div className="meter-fill" style={{ width: `${selectedEmployee.compliance}%`, background: selectedEmployee.compliance >= 90 ? 'var(--accent)' : 'var(--danger)' }}></div>
                       </div>
@@ -1985,8 +1981,8 @@ function App() {
                                 <span style={{ color: '#1c4c8d', fontWeight: '700', fontSize: '10px', textTransform: 'uppercase' }}>Matricule:</span>
                                 <span style={{ fontWeight: '800', fontSize: '14px', color: '#334155', fontFamily: 'monospace' }}>{selectedEmployee.matricule}</span>
                               </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                                <span style={{ color: '#1c4c8d', fontWeight: '700', fontSize: '10px', textTransform: 'uppercase' }}>Fonction</span>
+                               <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                                <span style={{ color: '#1c4c8d', fontWeight: '700', fontSize: '10px', textTransform: 'uppercase' }}>FONCTION</span>
                                 <span style={{ fontWeight: '600', fontSize: '12px', color: '#64748b' }}>{selectedEmployee.role}</span>
                               </div>
                               <div style={{ background: selectedEmployee.aptitudeMedicale !== false ? '#dcfce7' : '#fee2e2', color: selectedEmployee.aptitudeMedicale !== false ? '#166534' : '#991b1b', padding: '6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '12px', textTransform: 'uppercase', marginTop: '5px' }}>
