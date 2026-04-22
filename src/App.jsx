@@ -288,10 +288,13 @@ function App() {
     const url = `${API_URL}${endpoint}`
     const options = {
       url,
+      method: method.toUpperCase(),
       headers: method.toUpperCase() === 'GET' || method.toUpperCase() === 'DELETE' ? {} : { 'Content-Type': 'application/json' },
-      data: data,
-      connectTimeout: 15000, // Timeout un peu plus long pour les mauvaises connexions
-      method: method.toUpperCase()
+      connectTimeout: 15000
+    }
+
+    if (data !== null && method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'DELETE') {
+      options.data = data;
     }
 
     try {
@@ -303,8 +306,10 @@ function App() {
       try {
         const fetchOptions = {
           method: method.toUpperCase(),
-          headers: { 'Content-Type': 'application/json' },
-          body: data ? JSON.stringify(data) : null
+          headers: method.toUpperCase() === 'GET' || method.toUpperCase() === 'DELETE' ? {} : { 'Content-Type': 'application/json' }
+        }
+        if (data !== null && method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'DELETE') {
+          fetchOptions.body = JSON.stringify(data);
         }
         const res = await fetch(url, fetchOptions)
         const resData = await res.json()
