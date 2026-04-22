@@ -457,7 +457,7 @@ function App() {
         if (res.status === 200) {
           const updatedEmployees = employees.filter(e => e.matricule !== id)
           setEmployees(updatedEmployees)
-          localStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(updatedEmployees))
+          safeStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(updatedEmployees))
           showToast("Employé retiré du serveur")
         } else {
           showToast(`Échec (Code: ${res.status}): ` + (res.data?.error || "Erreur serveur"), "danger")
