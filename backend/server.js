@@ -133,9 +133,10 @@ app.post('/api/accounts', async (req, res) => {
   }
 });
 
-app.delete('/api/accounts/:email', async (req, res) => {
+app.delete('/api/accounts', async (req, res) => {
+  const { email } = req.query;
   try {
-    await pool.query('DELETE FROM accounts WHERE email = $1', [req.params.email]);
+    await pool.query('DELETE FROM accounts WHERE email = $1', [email]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -185,9 +186,10 @@ app.post('/api/employees', async (req, res) => {
   }
 });
 
-app.delete('/api/employees/:matricule', async (req, res) => {
+app.delete('/api/employees', async (req, res) => {
+  const { matricule } = req.query;
   try {
-    await pool.query('DELETE FROM employees WHERE matricule = $1', [req.params.matricule]);
+    await pool.query('DELETE FROM employees WHERE matricule = $1', [matricule]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -231,9 +233,10 @@ app.post('/api/caisses', async (req, res) => {
   }
 });
 
-app.delete('/api/caisses/:numeroCaisse', async (req, res) => {
+app.delete('/api/caisses', async (req, res) => {
+  const { numeroCaisse } = req.query;
   try {
-    await pool.query('DELETE FROM caisses WHERE numero_caisse = $1', [req.params.numeroCaisse]);
+    await pool.query('DELETE FROM caisses WHERE numero_caisse = $1', [numeroCaisse]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -282,9 +285,10 @@ app.post('/api/projets', async (req, res) => {
   }
 });
 
-app.delete('/api/projets/:nomChantier', async (req, res) => {
+app.delete('/api/projets', async (req, res) => {
+  const { nomChantier } = req.query;
   try {
-    await pool.query('DELETE FROM projets WHERE nom_chantier = $1', [req.params.nomChantier]);
+    await pool.query('DELETE FROM projets WHERE nom_chantier = $1', [nomChantier]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
