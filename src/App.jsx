@@ -55,14 +55,14 @@ const calculateProjectDuration = (startDate) => {
   if (!startDate) return '0 jour';
   const start = new Date(startDate);
   const now = new Date();
-  
+
   // Set to midnight to compare full days
   start.setHours(0, 0, 0, 0);
   now.setHours(0, 0, 0, 0);
-  
+
   const diffTime = now.getTime() - start.getTime();
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
-  
+
   if (diffDays <= 0) return 'Début bientôt';
   return `${diffDays} jour${diffDays > 1 ? 's' : ''}`;
 };
@@ -2039,7 +2039,7 @@ function App() {
                           </div>
                           <div style={{ marginTop: 'auto', borderTop: '1px dashed #cbd5e1', paddingTop: '10px', textAlign: 'center' }}>
                             <div style={{ fontSize: '12px', fontWeight: '900', color: '#1e293b' }}>MADAGREEN POWER</div>
-                            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '5px' }}>☎ Urgence HSE: 034 34 001 97</div>
+                            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '5px' }}>☎ Urgence HSE: 034 34 001 97 / 038 48 911 41 </div>
                           </div>
                         </div>
                       </div>
