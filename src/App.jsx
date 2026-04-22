@@ -436,7 +436,7 @@ function App() {
 
       if (dialogType === 'account') {
         const email = dialogItem.email;
-        const res = await apiCall('DELETE', `/accounts/${email}`)
+        const res = await apiCall('DELETE', `/accounts/${encodeURIComponent(email)}`)
 
         if (res.status === 200) {
           setAccounts(prev => prev.filter(a => a.email !== email))
@@ -447,7 +447,7 @@ function App() {
 
       } else if (dialogType === 'employee') {
         const id = dialogItem.matricule;
-        const res = await apiCall('DELETE', `/employees/${id}`)
+        const res = await apiCall('DELETE', `/employees/${encodeURIComponent(id)}`)
 
         if (res.status === 200) {
           const updatedEmployees = employees.filter(e => e.matricule !== id)
@@ -940,7 +940,7 @@ function App() {
                               }
                               try {
                                 showToast("Suppression sur le serveur...", "info")
-                                const res = await apiCall('DELETE', `/projets/${p.nomChantier}`)
+                                const res = await apiCall('DELETE', `/projets/${encodeURIComponent(p.nomChantier)}`)
 
                                 if (res.status === 200) {
                                   const updated = projets.filter((_, idx) => idx !== i)
@@ -1206,7 +1206,7 @@ function App() {
                             }
                             try {
                               showToast("Suppression caisse...", "info")
-                              const res = await apiCall('DELETE', `/caisses/${c.numeroCaisse}`)
+                              const res = await apiCall('DELETE', `/caisses/${encodeURIComponent(c.numeroCaisse)}`)
 
                               if (res.status === 200) {
                                 const updated = caisses.filter((_, idx) => idx !== i);
