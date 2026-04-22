@@ -8,6 +8,12 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 3009;
 
+// --- LOGGING ---
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
+
 // --- SÉCURITÉ RÉSEAU ---
 app.use(helmet()); // Protège les en-têtes HTTP
 app.use(cors());

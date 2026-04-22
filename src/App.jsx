@@ -288,7 +288,7 @@ function App() {
     const url = `${API_URL}${endpoint}`
     const options = {
       url,
-      headers: { 'Content-Type': 'application/json' },
+      headers: method.toUpperCase() === 'GET' || method.toUpperCase() === 'DELETE' ? {} : { 'Content-Type': 'application/json' },
       data: data,
       connectTimeout: 15000, // Timeout un peu plus long pour les mauvaises connexions
       method: method.toUpperCase()
