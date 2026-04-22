@@ -1627,17 +1627,17 @@ function App() {
                   <StatCard label="Alertes Critiques" value={employees.filter(e => e.compliance < 60).length} color="danger" />
                 </div>
 
-                {/* Advanced Analytics by Role */}
+                {/* Advanced Department Analytics */}
                 <div className="glass-panel" style={{ padding: '2rem', marginBottom: '3rem' }}>
-                  <h3 style={{ fontSize: '1.1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>📊 Analyse par Fonction</h3>
+                  <h3 style={{ fontSize: '1.1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>📊 Analyse par Département</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem' }}>
-                    {[...new Set(employees.map(e => e.role))].map(role => {
-                      const roleEmps = employees.filter(e => e.role === role);
-                      const avgComp = Math.round(roleEmps.reduce((acc, e) => acc + e.compliance, 0) / (roleEmps.length || 1));
+                    {[...new Set(employees.map(e => e.departement))].map(dept => {
+                      const deptEmps = employees.filter(e => e.departement === dept);
+                      const avgComp = Math.round(deptEmps.reduce((acc, e) => acc + e.compliance, 0) / (deptEmps.length || 1));
                       return (
-                        <div key={role}>
+                        <div key={dept}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                            <span>{role}</span>
+                            <span>{dept}</span>
                             <span>{avgComp}%</span>
                           </div>
                           <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
@@ -1654,6 +1654,10 @@ function App() {
                     <h2>Liste des personnels</h2>
                     <div className="controls-group" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                       <button className="btn-secondary" onClick={exportCSV}>📥 CSV</button>
+                      <select className="glass-input" style={{ width: '160px' }} value={filterDept} onChange={e => setFilterDept(e.target.value)}>
+                        <option value="Tous">Tous Depts</option>
+                        {[...new Set(employees.map(e => e.departement))].map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
                       <input type="text" className="glass-input" placeholder="Rechercher..." style={{ width: '220px' }} value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                       {currentUser?.role === 'Admin' && (
                         <button className="btn-primary" onClick={() => { setFormData({ firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true, epis: { gants: { checked: false, date: '' }, chaussures: { checked: false, date: '' }, casques: { checked: false, date: '' }, uniforme: { checked: false, date: '' }, gillet: { checked: false, date: '' } } }); setEmployeeView('add') }}>+ Nouveau</button>
@@ -1663,7 +1667,7 @@ function App() {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     {employees
-                      .filter(e => (e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.matricule.toLowerCase().includes(searchTerm.toLowerCase())))
+                      .filter(e => (filterDept === 'Tous' || e.departement === filterDept) && (e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.matricule.toLowerCase().includes(searchTerm.toLowerCase())))
                       .map(e => <EmployeeRaw key={e.matricule} emp={e} />)}
                   </div>
                 </div>
@@ -1738,6 +1742,10 @@ function App() {
                   <div>
                     <label className="input-label">Prénom</label>
                     <input type="text" name="firstName" className="glass-input" value={formData.firstName} onChange={handleFormChange} required placeholder="Jean" />
+                  </div>
+                  <div>
+                    <label className="input-label">Département</label>
+                    <input type="text" name="departement" className="glass-input" value={formData.departement} onChange={handleFormChange} required placeholder="Exploitation" />
                   </div>
                   <div>
                     <label className="input-label">Fonction</label>
