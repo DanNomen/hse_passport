@@ -18,6 +18,7 @@ const CERTIFICATION_LIST = ["TH - Port Harnais", "HT - BT", "ATEX niv1",
 const INITIAL_EMPLOYEES = []
 
 const INITIAL_ACCOUNTS = [
+  { email: 'superadmin@madagreen.com', password: 'super', role: 'Super Admin' },
   { email: 'admin@madagreen.com', password: 'admin', role: 'Admin' },
   { email: 'visiteur@madagreen.com', password: 'visit', role: 'Visiteur' }
 ]
@@ -94,9 +95,13 @@ function App() {
             // 2. If still full and it's the employee list, strip the heavy avatars for the cache
             if (key.includes('employees')) {
               try {
-                console.warn("Storage still full, caching without avatars...");
+                console.warn("Storage still full, caching without heavy assets...");
                 const data = JSON.parse(value);
-                const lightData = data.map(emp => ({ ...emp, avatar: null }));
+                const lightData = data.map(emp => ({ 
+                  ...emp, 
+                  avatar: null, 
+                  certifications: emp.certifications?.map(c => ({ ...c, attachment: null })) 
+                }));
                 localStorage.setItem(key, JSON.stringify(lightData));
               } catch (e3) {
                 localStorage.removeItem(key);
@@ -151,7 +156,7 @@ function App() {
     firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true,
     epis: { gants: { checked: false, date: '' }, chaussures: { checked: false, date: '' }, casques: { checked: false, date: '' }, uniforme: { checked: false, date: '' }, gillet: { checked: false, date: '' } }
   })
-  const [draftCert, setDraftCert] = useState({ name: '', dateObtention: '', validite: '', dateExpiration: '' })
+  const [draftCert, setDraftCert] = useState({ name: '', dateObtention: '', validite: '', dateExpiration: '', attachment: null })
   const [newAccountFormData, setNewAccountFormData] = useState({ email: '', password: '', role: 'Visiteur' })
   const [selectedHub, setSelectedHub] = useState(() => localStorage.getItem('hse_selectedHub') || null)
   const [projetView, setProjetView] = useState('projet')
@@ -177,6 +182,7 @@ function App() {
 
   // Modal State
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, item: null, type: '' })
+  const [pdfViewerUrl, setPdfViewerUrl] = useState(null)
 
   // Chargement initial des données depuis le serveur en mode Prod
   useEffect(() => {
@@ -387,7 +393,7 @@ function App() {
       }
     }
 
-    const scopeAccounts = selectedHub === 'projet' ? PROJET_ACCOUNTS : [...accounts, ...INITIAL_ACCOUNTS]
+    const scopeAccounts = selectedHub === 'projet' ? [...PROJET_ACCOUNTS, ...accounts] : [...accounts, ...INITIAL_ACCOUNTS]
     const acc = scopeAccounts.find(a => a.email.toLowerCase() === emailInput && a.password === passwordInput)
 
     if (acc) {
@@ -475,7 +481,25 @@ function App() {
   const addCert = () => {
     if (!draftCert.name || !draftCert.dateObtention || !draftCert.validite) return
     setFormData(prev => ({ ...prev, certifications: [...prev.certifications, { ...draftCert }] }))
-    setDraftCert({ name: '', dateObtention: '', validite: '', dateExpiration: '' })
+    setDraftCert({ name: '', dateObtention: '', validite: '', dateExpiration: '', attachment: null })
+  }
+
+  const handleCertFileChange = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      if (file.type !== 'application/pdf') {
+        showToast("Seuls les fichiers PDF sont acceptés", "danger")
+        return
+      }
+      const reader = new FileReader()
+      reader.onloadend = () => setDraftCert(prev => ({ ...prev, attachment: reader.result }))
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const viewAttachment = (attachment) => {
+    if (!attachment) return;
+    setPdfViewerUrl(attachment);
   }
 
   const saveEmployee = async (e) => {
@@ -637,7 +661,11 @@ function App() {
   )
 
   const EmployeeRaw = ({ emp }) => (
-    <div className="glass-card employee-row animate-slide-up" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', background: 'var(--card-bg-light)' }}>
+    <div 
+      className="glass-card employee-row animate-slide-up" 
+      onClick={() => { setSelectedEmployee(emp); setEmployeeView('badge') }}
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', background: 'var(--card-bg-light)', cursor: 'pointer' }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
         <div style={{ width: '50px', height: '50px', borderRadius: '14px', background: 'var(--primary)', padding: '2px' }}>
           <img src={emp.avatar || avatarPlaceholder} style={{ width: '100%', height: '100%', borderRadius: '12px', objectFit: 'cover' }} alt="Avatar" />
@@ -653,12 +681,11 @@ function App() {
           <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-dim)', letterSpacing: '1px' }}>{emp.status}</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {currentUser?.role === 'Admin' && (
-            <button className="btn-icon" onClick={() => startEdit(emp)}>✎</button>
+          {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
+            <button className="btn-icon" onClick={(e) => { e.stopPropagation(); startEdit(emp); }}>✎</button>
           )}
-          <button className="btn-icon" onClick={() => { setSelectedEmployee(emp); setEmployeeView('badge') }} style={{ color: 'var(--primary)' }}>ID</button>
-          {currentUser?.role === 'Admin' && (
-            <button className="btn-icon" onClick={() => handleDelete(emp)} style={{ color: 'var(--danger)' }}>🗑</button>
+          {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
+            <button className="btn-icon" onClick={(e) => { e.stopPropagation(); handleDelete(emp); }} style={{ color: 'var(--danger)' }}>🗑</button>
           )}
         </div>
       </div>
@@ -696,7 +723,7 @@ function App() {
                     <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>{currentUser?.email}</span>&nbsp;({currentUser?.role})
                   </span>
                   <button className={`btn-secondary nav-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => setEmployeeView('list')}>Employés</button>
-                  {currentUser?.role === 'Admin' && (
+                  {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
                     <button className={`btn-secondary nav-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => setEmployeeView('settings')}>Paramètres</button>
                   )}
                   <button className={`btn-secondary nav-btn logout-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => {
@@ -720,8 +747,10 @@ function App() {
                     <span className={isSyncing ? 'animate-spin' : ''} style={{ display: 'inline-block' }}>☁️</span>
                   </button>
                   <button className={`btn-secondary nav-btn`} style={{ color: projetView === 'projet' ? '#3b82f6' : '' }} onClick={() => setProjetView('projet')}>Projet</button>
-                  <button className={`btn-secondary nav-btn`} style={{ color: projetView === 'materiels' ? '#3b82f6' : '' }} onClick={() => setProjetView('materiels')}>Matériels</button>
-                  {currentUser?.role === 'Admin' && (
+                  {currentUser?.role === 'Super Admin' && (
+                    <button className={`btn-secondary nav-btn`} style={{ color: projetView === 'materiels' ? '#3b82f6' : '' }} onClick={() => setProjetView('materiels')}>Matériels</button>
+                  )}
+                  {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
                     <button className={`btn-secondary nav-btn`} style={{ color: projetView === 'parametres' ? '#3b82f6' : '' }} onClick={() => setProjetView('parametres')}>Paramètres</button>
                   )}
                   <span className="user-badge mobile-hide">
@@ -1610,9 +1639,51 @@ function App() {
               </div>
             )}
             {projetView === 'parametres' && (
-              <div className="glass-panel" style={{ padding: '2rem' }}>
-                <h2>Paramètres Projet</h2>
-                <p>Configuration du module projet.</p>
+              <div className="glass-panel animate-slide-up" style={{ maxWidth: '700px', margin: '0 auto', padding: '3rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '3rem' }}>
+                  <button className="btn-icon" onClick={() => setProjetView('projet')}>←</button>
+                  <h2>Gestion des Accès (Projet)</h2>
+                </div>
+
+                <div style={{ background: 'var(--card-bg-light)', padding: '2rem', borderRadius: '16px', marginBottom: '3rem' }}>
+                  <h3 style={{ marginBottom: '1.5rem' }}>Créer un nouvel accès</h3>
+                  <form onSubmit={handleAccountCreate} className="form-grid" style={{ gap: '1.5rem' }}>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <label className="input-label">Email de connexion</label>
+                      <input type="email" className="glass-input" value={newAccountFormData.email} onChange={e => setNewAccountFormData({ ...newAccountFormData, email: e.target.value })} required placeholder="nom@entreprise.com" />
+                    </div>
+                    <div>
+                      <label className="input-label">Mot de passe</label>
+                      <input type="password" className="glass-input" value={newAccountFormData.password} onChange={e => setNewAccountFormData({ ...newAccountFormData, password: e.target.value })} required placeholder="••••••••" />
+                    </div>
+                    <div>
+                      <label className="input-label">Niveau d'accès</label>
+                      <select className="glass-input" value={newAccountFormData.role} onChange={e => setNewAccountFormData({ ...newAccountFormData, role: e.target.value })}>
+                        <option value="Super Admin">Super Administrateur (Accès Total)</option>
+                        <option value="Admin">Administrateur (Lecture & Écriture)</option>
+                        <option value="Visiteur">Visiteur (Lecture seule)</option>
+                      </select>
+                    </div>
+                    <div style={{ gridColumn: 'span 2', marginTop: '1rem' }}>
+                      <button type="submit" className="btn-primary" style={{ width: '100%', justifyContent: 'center' }}>Ajouter l'utilisateur</button>
+                    </div>
+                  </form>
+                </div>
+
+                <h3>Comptes Existants</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
+                  {[...PROJET_ACCOUNTS, ...accounts].map((acc, idx) => (
+                    <div key={idx} className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem' }}>
+                      <div>
+                        <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{acc.email}</div>
+                        <div style={{ fontSize: '0.85rem', color: acc.role === 'Admin' ? '#3b82f6' : 'var(--text-dim)' }}>Accès {acc.role}</div>
+                      </div>
+                      {acc.email !== currentUser.email && !PROJET_ACCOUNTS.some(pa => pa.email === acc.email) && (
+                        <button className="btn-icon" onClick={() => handleAccountDelete(acc.email)} style={{ color: 'var(--danger)' }}>🗑</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -1642,21 +1713,21 @@ function App() {
                   <StatCard label="Alertes Critiques" value={employees.filter(e => e.compliance < 60).length} color="danger" />
                 </div>
 
-                {/* Advanced Department Analytics */}
+                {/* Advanced Certification Analytics */}
                 <div className="glass-panel" style={{ padding: '2rem', marginBottom: '3rem' }}>
-                  <h3 style={{ fontSize: '1.1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>📊 Analyse par Département</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem' }}>
-                    {[...new Set(employees.map(e => e.departement))].map(dept => {
-                      const deptEmps = employees.filter(e => e.departement === dept);
-                      const avgComp = Math.round(deptEmps.reduce((acc, e) => acc + e.compliance, 0) / (deptEmps.length || 1));
+                  <h3 style={{ fontSize: '1.1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>📊 Analyse par Certification</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '2rem' }}>
+                    {CERTIFICATION_LIST.map(cert => {
+                      const count = employees.filter(e => e.certifications?.some(c => c.name === cert && !isExpired(c.dateExpiration) && c.attachment)).length;
+                      const percentage = employees.length > 0 ? Math.round((count / employees.length) * 100) : 0;
                       return (
-                        <div key={dept}>
+                        <div key={cert}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                            <span>{dept}</span>
-                            <span>{avgComp}%</span>
+                            <span>{cert}</span>
+                            <span style={{ color: count > 0 ? 'var(--accent)' : 'var(--text-dim)' }}>{count} pers. ({percentage}%)</span>
                           </div>
                           <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${avgComp}%`, background: avgComp >= 90 ? 'var(--accent)' : (avgComp >= 60 ? 'var(--warning)' : 'var(--danger)'), transition: 'width 1s ease' }}></div>
+                            <div style={{ height: '100%', width: `${percentage}%`, background: percentage >= 50 ? 'var(--accent)' : (percentage >= 20 ? 'var(--warning)' : 'var(--primary)'), transition: 'width 1s ease' }}></div>
                           </div>
                         </div>
                       );
@@ -1674,7 +1745,7 @@ function App() {
                         {[...new Set(employees.map(e => e.departement))].map(d => <option key={d} value={d}>{d}</option>)}
                       </select>
                       <input type="text" className="glass-input" placeholder="Rechercher..." style={{ width: '220px' }} value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                      {currentUser?.role === 'Admin' && (
+                      {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
                         <button className="btn-primary" onClick={() => { setFormData({ firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true, epis: { gants: { checked: false, date: '' }, chaussures: { checked: false, date: '' }, casques: { checked: false, date: '' }, uniforme: { checked: false, date: '' }, gillet: { checked: false, date: '' } } }); setEmployeeView('add') }}>+ Nouveau</button>
                       )}
                     </div>
@@ -1708,6 +1779,7 @@ function App() {
                     <div>
                       <label className="input-label">Niveau d'accès</label>
                       <select className="glass-input" value={newAccountFormData.role} onChange={e => setNewAccountFormData({ ...newAccountFormData, role: e.target.value })}>
+                        <option value="Super Admin">Super Administrateur (Accès Total)</option>
                         <option value="Admin">Administrateur (Lecture & Écriture)</option>
                         <option value="Visiteur">Visiteur (Lecture seule)</option>
                       </select>
@@ -1831,7 +1903,12 @@ function App() {
                             <div style={{ fontWeight: '700', fontSize: '0.9rem' }}>{c.name}</div>
                             <div style={{ fontSize: '0.7rem', color: isExpired(c.dateExpiration) ? 'var(--danger)' : 'var(--accent)' }}>Exp: {c.dateExpiration}</div>
                           </div>
-                          <button type="button" onClick={() => setFormData(f => ({ ...f, certifications: f.certifications.filter((_, idx) => idx !== i) }))} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}>✕</button>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            {c.attachment && (
+                              <button type="button" onClick={() => viewAttachment(c.attachment)} style={{ background: 'var(--primary-glow)', border: 'none', color: 'var(--primary)', cursor: 'pointer', borderRadius: '4px', padding: '2px 6px', fontSize: '0.8rem' }}>📎 Voir</button>
+                            )}
+                            <button type="button" onClick={() => setFormData(f => ({ ...f, certifications: f.certifications.filter((_, idx) => idx !== i) }))} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}>✕</button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1852,7 +1929,16 @@ function App() {
                         <label className="input-label">Validité (ans)</label>
                         <input type="number" className="glass-input" value={draftCert.validite} onChange={e => setDraftCert(d => ({ ...d, validite: e.target.value }))} />
                       </div>
-                      <button type="button" className="btn-secondary" onClick={addCert} style={{ height: '46px', width: '100%' }}>Ajouter</button>
+                      <div>
+                        <label className="input-label">Pièce Jointe</label>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <button type="button" className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.5rem', flex: 1 }} onClick={() => document.getElementById('cert-file').click()}>
+                            {draftCert.attachment ? '✅ PDF Joint' : '📎 Joindre PDF'}
+                          </button>
+                          <input type="file" id="cert-file" hidden accept="application/pdf" onChange={handleCertFileChange} />
+                        </div>
+                      </div>
+                      <button type="button" className="btn-primary" onClick={addCert} style={{ height: '46px', width: '100%' }}>Ajouter</button>
                     </div>
                   </div>
 
@@ -1907,12 +1993,17 @@ function App() {
                           <div style={{ fontWeight: '700' }}>{c.name}</div>
                           <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Délivré le {c.dateObtention}</div>
                         </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-                            {(new Date(c.dateExpiration) - new Date()) < (30 * 24 * 60 * 60 * 1000) && !isExpired(c.dateExpiration) ? <span style={{ color: 'var(--warning)', fontWeight: '800' }}>BIENTÔT EXPIRED! </span> : null}
-                            {isExpired(c.dateExpiration) ? <span style={{ color: 'var(--danger)', fontWeight: '800' }}>EXPIRED! </span> : 'Expiration'}
+                        <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          {c.attachment && (
+                            <button className="btn-icon" onClick={() => viewAttachment(c.attachment)} style={{ background: 'var(--primary-glow)', color: 'var(--primary)', padding: '8px', borderRadius: '10px' }} title="Voir la pièce jointe">📎</button>
+                          )}
+                          <div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                              {(new Date(c.dateExpiration) - new Date()) < (30 * 24 * 60 * 60 * 1000) && !isExpired(c.dateExpiration) ? <span style={{ color: 'var(--warning)', fontWeight: '800' }}>BIENTÔT EXPIRED! </span> : null}
+                              {isExpired(c.dateExpiration) ? <span style={{ color: 'var(--danger)', fontWeight: '800' }}>EXPIRED! </span> : 'Expiration'}
+                            </div>
+                            <div style={{ fontWeight: '700', color: isExpired(c.dateExpiration) ? 'var(--danger)' : 'var(--text-main)' }}>{c.dateExpiration}</div>
                           </div>
-                          <div style={{ fontWeight: '700', color: isExpired(c.dateExpiration) ? 'var(--danger)' : 'var(--text-main)' }}>{c.dateExpiration}</div>
                         </div>
                       </div>
                     )) : <p>Aucun certificat enregistré.</p>}
@@ -1922,7 +2013,7 @@ function App() {
                     <button className="btn-primary" style={{ width: '100%', maxWidth: '300px', justifyContent: 'center', padding: '1.2rem' }} onClick={printBadge}>
                       ⎙ Imprimer le Badge PDF
                     </button>
-                    {currentUser?.role === 'Admin' && (
+                    {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
                       <button className="btn-secondary" style={{ width: '100%', maxWidth: '300px', justifyContent: 'center', padding: '1.2rem' }} onClick={() => startEdit(selectedEmployee)}>
                         ✎ Modifier le dossier
                       </button>
@@ -2092,6 +2183,26 @@ function App() {
           </div>
         ))}
       </div>
+
+      {/* In-App PDF Viewer Modal */}
+      {pdfViewerUrl && (
+        <div className="modal-overlay animate-fade-in" style={{ zIndex: 3000 }}>
+          <div className="glass-panel animate-slide-up" style={{ width: '95%', height: '90%', maxWidth: '1000px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', position: 'relative' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 0.5rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem' }}>📄 Visualisation du Certificat</h3>
+              <button className="btn-icon" onClick={() => setPdfViewerUrl(null)} style={{ fontSize: '1.5rem' }}>✕</button>
+            </div>
+            <div style={{ flex: 1, background: '#fff', borderRadius: '12px', overflow: 'hidden' }}>
+              <iframe 
+                src={pdfViewerUrl} 
+                style={{ width: '100%', height: '100%', border: 'none' }} 
+                title="PDF Viewer"
+              ></iframe>
+            </div>
+            <button className="btn-primary" onClick={() => setPdfViewerUrl(null)} style={{ justifyContent: 'center' }}>Fermer</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

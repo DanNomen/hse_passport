@@ -92,6 +92,7 @@ const initDB = async () => {
     // Inject default initial admin
     const adminCheck = await pool.query('SELECT * FROM accounts WHERE email = $1', ['admin@madagreen.com']);
     if (adminCheck.rows.length === 0) {
+      await pool.query(`INSERT INTO accounts (email, password, role) VALUES ('superadmin@madagreen.com', 'super', 'Super Admin')`);
       await pool.query(`INSERT INTO accounts (email, password, role) VALUES ('admin@madagreen.com', 'admin', 'Admin')`);
       await pool.query(`INSERT INTO accounts (email, password, role) VALUES ('visiteur@madagreen.com', 'visit', 'Visiteur')`);
     }
