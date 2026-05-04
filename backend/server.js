@@ -77,6 +77,7 @@ const initDB = async () => {
         responsable_chantier VARCHAR(200),
         epc JSONB NOT NULL DEFAULT '{}',
         intervenants JSONB NOT NULL DEFAULT '[]',
+        briefings JSONB NOT NULL DEFAULT '[]',
         date_creation VARCHAR(100)
       );
     `);
@@ -87,6 +88,9 @@ const initDB = async () => {
     } catch(e) {}
     try {
       await pool.query('ALTER TABLE employees ADD COLUMN epis JSONB DEFAULT \'{}\'');
+    } catch(e) {}
+    try {
+      await pool.query('ALTER TABLE projets ADD COLUMN briefings JSONB DEFAULT \'[]\'');
     } catch(e) {}
     
     // Inject default initial admin
@@ -260,6 +264,7 @@ app.get('/api/projets', async (req, res) => {
       dateDebut: r.date_debut,
       outillageCaisse: r.outillage_caisse,
       responsableChantier: r.responsable_chantier,
+      briefings: r.briefings || [],
       dateCreation: r.date_creation
     }));
     res.json({ success: true, projets: formatted });
@@ -277,14 +282,14 @@ app.post('/api/projets', async (req, res) => {
     if (check.rows.length > 0) {
       await pool.query(`
         UPDATE projets 
-        SET date_debut=$1, outillage_caisse=$2, responsable_chantier=$3, epc=$4, intervenants=$5, date_creation=$6
+        SET date_debut=$1, outillage_caisse=$2, responsable_chantier=$3, epc=$4, intervenants=$5, date_creation=$6, briefings=$9
         WHERE nom_chantier=$7 AND lieu=$8
-      `, [p.dateDebut, p.outillageCaisse, p.responsableChantier, JSON.stringify(p.epc || {}), JSON.stringify(p.intervenants || []), p.dateCreation, p.nomChantier, p.lieu]);
+      `, [p.dateDebut, p.outillageCaisse, p.responsableChantier, JSON.stringify(p.epc || {}), JSON.stringify(p.intervenants || []), p.dateCreation, p.nomChantier, p.lieu, JSON.stringify(p.briefings || [])]);
     } else {
       await pool.query(`
-        INSERT INTO projets (nom_chantier, lieu, date_debut, outillage_caisse, responsable_chantier, epc, intervenants, date_creation)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      `, [p.nomChantier, p.lieu, p.dateDebut, p.outillageCaisse, p.responsableChantier, JSON.stringify(p.epc || {}), JSON.stringify(p.intervenants || []), p.dateCreation]);
+        INSERT INTO projets (nom_chantier, lieu, date_debut, outillage_caisse, responsable_chantier, epc, intervenants, date_creation, briefings)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `, [p.nomChantier, p.lieu, p.dateDebut, p.outillageCaisse, p.responsableChantier, JSON.stringify(p.epc || {}), JSON.stringify(p.intervenants || []), p.dateCreation, JSON.stringify(p.briefings || [])]);
     }
     res.json({ success: true });
   } catch (err) {

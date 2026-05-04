@@ -19,11 +19,13 @@ const INITIAL_EMPLOYEES = []
 
 const INITIAL_ACCOUNTS = [
   { email: 'superadmin@madagreen.com', password: 'super', role: 'Super Admin' },
+  { email: 'madagreen@hse.com', password: 'pass', role: 'Super Admin' },
   { email: 'admin@madagreen.com', password: 'admin', role: 'Admin' },
   { email: 'visiteur@madagreen.com', password: 'visit', role: 'Visiteur' }
 ]
 
 const PROJET_ACCOUNTS = [
+  { email: 'madagreen@hse.com', password: 'pass', role: 'Super Admin' },
   { email: 'projet@madagreen.com', password: 'admin', role: 'Admin' }
 ]
 
@@ -80,33 +82,49 @@ function App() {
         localStorage.setItem(key, value);
       } catch (e) {
         if (e.name === 'QuotaExceededError') {
-          console.warn("Storage full, attempting cleanup...");
-          // 1. Remove all old versions and non-critical data
+          // 1. Remove all old versions
           for (let i = 0; i < localStorage.length; i++) {
             const k = localStorage.key(i);
-            if (k && k.startsWith('hse_') && !k.includes('v3') && !k.includes('isAuthenticated') && !k.includes('currentUser')) {
+            if (k && k.startsWith('hse_') && !k.includes('v3') && !k.includes('isAuthenticated') && !k.includes('currentUser') && !k.includes('selectedHub')) {
               localStorage.removeItem(k);
             }
           }
+
+          // 2. Aggressively strip heavy assets from any existing employee cache to free space
           try {
-            // Retry
-            localStorage.setItem(key, value);
-          } catch (e2) {
-            // 2. If still full and it's the employee list, strip the heavy avatars for the cache
-            if (key.includes('employees')) {
-              try {
-                console.warn("Storage still full, caching without heavy assets...");
-                const data = JSON.parse(value);
-                const lightData = data.map(emp => ({ 
-                  ...emp, 
-                  avatar: null, 
-                  certifications: emp.certifications?.map(c => ({ ...c, attachment: null })) 
-                }));
-                localStorage.setItem(key, JSON.stringify(lightData));
-              } catch (e3) {
-                localStorage.removeItem(key);
-              }
+            const empKeys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+               if (localStorage.key(i) && localStorage.key(i).includes('employees')) empKeys.push(localStorage.key(i));
             }
+            empKeys.forEach(empKey => {
+               const empDataStr = localStorage.getItem(empKey);
+               if (empDataStr) {
+                 const data = JSON.parse(empDataStr);
+                 const lightData = data.map(emp => ({
+                   ...emp,
+                   avatar: null,
+                   certifications: emp.certifications?.map(c => ({ ...c, attachment: null }))
+                 }));
+                 localStorage.setItem(empKey, JSON.stringify(lightData));
+               }
+            });
+          } catch(err) {}
+
+          try {
+            // 3. Retry saving the current item (strip if it happens to be employees)
+            if (key.includes('employees')) {
+              const data = JSON.parse(value);
+              const lightData = data.map(emp => ({
+                ...emp,
+                avatar: null,
+                certifications: emp.certifications?.map(c => ({ ...c, attachment: null }))
+              }));
+              localStorage.setItem(key, JSON.stringify(lightData));
+            } else {
+              localStorage.setItem(key, value);
+            }
+          } catch (e2) {
+            console.error("Storage critically full, failed to save:", key);
           }
         }
       }
@@ -158,7 +176,10 @@ function App() {
   })
   const [draftCert, setDraftCert] = useState({ name: '', dateObtention: '', validite: '', dateExpiration: '', attachment: null })
   const [newAccountFormData, setNewAccountFormData] = useState({ email: '', password: '', role: 'Visiteur' })
-  const [selectedHub, setSelectedHub] = useState(() => localStorage.getItem('hse_selectedHub') || null)
+  const [selectedHub, setSelectedHub] = useState(() => {
+    const saved = localStorage.getItem('hse_selectedHub');
+    return (saved === 'null' || saved === 'undefined') ? null : (saved || null);
+  });
   const [projetView, setProjetView] = useState('projet')
   const [projets, setProjets] = useState(() => {
     const saved = localStorage.getItem('gp_projets_v1')
@@ -183,68 +204,86 @@ function App() {
   // Modal State
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, item: null, type: '' })
   const [pdfViewerUrl, setPdfViewerUrl] = useState(null)
+  const [selectedBriefingIndex, setSelectedBriefingIndex] = useState(null)
+  const [briefingFormData, setBriefingFormData] = useState({ id: '', date: '', topic: '', responsable: '', description: '', commentaires: '', intervenants: [] })
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [notifications, setNotifications] = useState(() => {
+    const saved = localStorage.getItem('gp_notifications_v1')
+    return saved ? JSON.parse(saved) : []
+  })
+
+  // Persistence des notifications
+  useEffect(() => {
+    safeStorage.setItem('gp_notifications_v1', JSON.stringify(notifications))
+  }, [notifications])
+
+  const addNotification = (title, message, type = 'info') => {
+    const newNotif = {
+      id: Date.now(),
+      title,
+      message,
+      type,
+      date: new Date().toLocaleString('fr-FR'),
+      read: false
+    };
+    setNotifications(prev => [newNotif, ...prev].slice(0, 50)); // Garder les 50 dernières
+  };
 
   // Chargement initial des données depuis le serveur en mode Prod
   useEffect(() => {
     const fetchInitialData = async () => {
       if (isProd && isAuthenticated) {
         try {
-          const { CapacitorHttp } = await import('@capacitor/core')
+          const [resAcc, resEmp, resProj, resCaisse] = await Promise.all([
+            apiCall('GET', '/accounts'),
+            apiCall('GET', '/employees'),
+            apiCall('GET', '/projets'),
+            apiCall('GET', '/caisses')
+          ]);
 
-          // Récupérer les comptes
-          const resAcc = await CapacitorHttp.get({
-            url: `${API_URL}/accounts`,
-            connectTimeout: 30000
-          })
-          if (resAcc.status === 200 && resAcc.data.success) {
-            setAccounts(resAcc.data.accounts)
-            safeStorage.setItem(`hse_accounts_v3${DB_PREFIX}`, JSON.stringify(resAcc.data.accounts))
-          }
+          if (resAcc.status === 200 && resAcc.data.success) setAccounts(resAcc.data.accounts);
+          
+          const safeParse = (val, def) => {
+            if (typeof val === 'string') {
+              try { return JSON.parse(val); } catch(err) { return def; }
+            }
+            return val || def;
+          };
 
-          // Récupérer les employés
-          const resEmp = await CapacitorHttp.get({
-            url: `${API_URL}/employees`,
-            connectTimeout: 30000
-          })
           if (resEmp.status === 200 && resEmp.data.success) {
-            setEmployees(resEmp.data.employees)
-            safeStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(resEmp.data.employees))
+            setEmployees(resEmp.data.employees.map(e => ({
+              ...e,
+              certifications: safeParse(e.certifications, []),
+              epis: safeParse(e.epis, {})
+            })));
           }
 
-          // Récupérer les projets
-          const resProj = await CapacitorHttp.get({
-            url: `${API_URL}/projets`,
-            connectTimeout: 30000
-          })
           if (resProj.status === 200 && resProj.data.success) {
-            setProjets(resProj.data.projets)
-            safeStorage.setItem('gp_projets_v1', JSON.stringify(resProj.data.projets))
+            setProjets(resProj.data.projets.map(p => ({
+              ...p,
+              briefings: safeParse(p.briefings, []),
+              intervenants: safeParse(p.intervenants, []),
+              epc: safeParse(p.epc, {})
+            })));
           }
 
-          // Récupérer les caisses
-          const resCaisse = await CapacitorHttp.get({
-            url: `${API_URL}/caisses`,
-            connectTimeout: 30000
-          })
-          if (resCaisse.status === 200 && resCaisse.data.success) {
-            setCaisses(resCaisse.data.caisses)
-            safeStorage.setItem('gp_caisses_v1', JSON.stringify(resCaisse.data.caisses))
-          }
+          if (resCaisse.status === 200 && resCaisse.data.success) setCaisses(resCaisse.data.caisses);
+
+          showToast("Données synchronisées");
         } catch (err) {
-          console.error("Erreur chargement initial:", err)
-          if (err.message?.includes('UNREACHABLE')) {
-            showToast("Le serveur de production est temporairement injoignable.", "danger")
-          }
+          console.error("Erreur chargement initial:", err);
         }
       }
     }
     fetchInitialData()
-  }, [isProd, isAuthenticated, API_URL, DB_PREFIX])
+  }, [isProd, isAuthenticated])
 
   useEffect(() => {
     safeStorage.setItem(`hse_employees_v3${DB_PREFIX}`, JSON.stringify(employees))
     safeStorage.setItem(`hse_accounts_v3${DB_PREFIX}`, JSON.stringify(accounts))
-  }, [employees, accounts, DB_PREFIX])
+    safeStorage.setItem('gp_projets_v1', JSON.stringify(projets))
+    safeStorage.setItem('gp_caisses_v1', JSON.stringify(caisses))
+  }, [employees, accounts, projets, caisses, DB_PREFIX])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -376,9 +415,9 @@ function App() {
     const finalizeAuth = async (account) => {
       setCurrentUser(account)
       setIsAuthenticated(true)
-      localStorage.setItem('hse_isAuthenticated', 'true')
-      localStorage.setItem('hse_currentUser', JSON.stringify(account))
-      localStorage.setItem('hse_selectedHub', selectedHub)
+      safeStorage.setItem('hse_isAuthenticated', 'true')
+      safeStorage.setItem('hse_currentUser', JSON.stringify(account))
+      safeStorage.setItem('hse_selectedHub', selectedHub)
     }
 
     if (isProd && isOnline) {
@@ -616,8 +655,8 @@ function App() {
 
       const pdf = new jsPDF('p', 'mm', 'a4');
 
-      const imgW = 85;
-      const imgH = 105;
+      const imgW = 54;
+      const imgH = 86;
       const xPos = (210 - imgW) / 2;
 
       pdf.addImage(canvasRecto.toDataURL('image/png'), 'PNG', xPos, 15, imgW, imgH);
@@ -654,38 +693,55 @@ function App() {
 
   // --- Sub-components ---
   const StatCard = ({ label, value, color }) => (
-    <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center' }}>
-      <div style={{ fontSize: '2.5rem', fontWeight: '900', color: `var(--${color})` }}>{value}</div>
-      <div className="input-label" style={{ marginBottom: 0 }}>{label}</div>
+    <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '160px' }}>
+      <div style={{ position: 'absolute', top: '-15px', right: '-15px', fontSize: '4rem', opacity: 0.03, transform: 'rotate(15deg)' }}>📊</div>
+      <div style={{ fontSize: '2.5rem', fontWeight: '900', color: `var(--${color})`, marginBottom: '0.25rem', fontFamily: 'var(--font-heading)', lineHeight: 1.1 }}>{value}</div>
+      <div className="input-label" style={{ marginBottom: 0, fontSize: '0.65rem', letterSpacing: '1px', opacity: 0.8 }}>{label}</div>
     </div>
   )
 
   const EmployeeRaw = ({ emp }) => (
-    <div 
-      className="glass-card employee-row animate-slide-up" 
+    <div
+      className="glass-card employee-row animate-slide-up"
       onClick={() => { setSelectedEmployee(emp); setEmployeeView('badge') }}
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', background: 'var(--card-bg-light)', cursor: 'pointer' }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '1rem 1.5rem',
+        background: 'var(--bg-card)',
+        cursor: 'pointer',
+        marginBottom: '0.75rem',
+        borderLeft: `4px solid ${emp.compliance >= 90 ? 'var(--accent)' : emp.compliance >= 60 ? 'var(--warning)' : 'var(--danger)'}`,
+        transition: 'var(--transition)'
+      }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-        <div style={{ width: '50px', height: '50px', borderRadius: '14px', background: 'var(--primary)', padding: '2px' }}>
-          <img src={emp.avatar || avatarPlaceholder} style={{ width: '100%', height: '100%', borderRadius: '12px', objectFit: 'cover' }} alt="Avatar" />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+        <div style={{ width: '50px', height: '50px', borderRadius: '12px', background: 'linear-gradient(135deg, var(--primary), var(--accent))', padding: '2px', position: 'relative', boxShadow: 'var(--shadow-sm)' }}>
+          <img src={emp.avatar || avatarPlaceholder} style={{ width: '100%', height: '100%', borderRadius: '10px', objectFit: 'cover', border: '2px solid var(--bg-main)' }} alt="Avatar" />
+          <div style={{ position: 'absolute', bottom: '-2px', right: '-2px', width: '10px', height: '10px', borderRadius: '50%', background: emp.compliance >= 90 ? 'var(--accent)' : 'var(--danger)', border: '2px solid var(--bg-main)' }}></div>
         </div>
         <div>
-          <h4 style={{ fontSize: '1.1rem', fontWeight: '700' }}>{emp.lastName?.toUpperCase()} {emp.firstName}</h4>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>{emp.role} • <span style={{ fontFamily: 'monospace', color: 'var(--primary)' }}>{emp.matricule}</span></span>
+          <div style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--text-primary)', marginBottom: '0.1rem', letterSpacing: '-0.02em' }}>{emp.lastName?.toUpperCase()} {emp.firstName}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: '600' }}>{emp.role}</span>
+            <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: 'var(--text-muted)' }}></span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-heading)' }}>{emp.matricule}</span>
+          </div>
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-        <div style={{ textAlign: 'right', minWidth: '100px' }}>
-          <div style={{ fontWeight: '800', fontSize: '1.1rem', color: emp.compliance >= 90 ? 'var(--accent)' : emp.compliance >= 60 ? 'var(--warning)' : 'var(--danger)' }}>{emp.compliance}%</div>
-          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-dim)', letterSpacing: '1px' }}>{emp.status}</div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '2.5rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+          <div style={{ fontWeight: '900', fontSize: '1.25rem', color: emp.compliance >= 90 ? 'var(--accent)' : emp.compliance >= 60 ? 'var(--warning)' : 'var(--danger)', lineHeight: 1 }}>{emp.compliance}%</div>
+          <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '1px', fontWeight: '800', marginTop: '0.2rem' }}>Conformité</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
-            <button className="btn-icon" onClick={(e) => { e.stopPropagation(); startEdit(emp); }}>✎</button>
-          )}
-          {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
-            <button className="btn-icon" onClick={(e) => { e.stopPropagation(); handleDelete(emp); }} style={{ color: 'var(--danger)' }}>🗑</button>
+            <>
+              <button className="btn-icon" style={{ width: '32px', height: '32px', fontSize: '0.9rem' }} onClick={(e) => { e.stopPropagation(); startEdit(emp); }} title="Modifier">✎</button>
+              <button className="btn-icon" style={{ width: '32px', height: '32px', fontSize: '0.9rem', color: 'var(--danger)' }} onClick={(e) => { e.stopPropagation(); handleDelete(emp); }} title="Supprimer">🗑</button>
+            </>
           )}
         </div>
       </div>
@@ -697,297 +753,345 @@ function App() {
     <div className={`app-wrapper ${theme}`}>
       <nav className={!showHeader ? 'nav-hidden' : ''}>
         <div className="logo">
-          <span>MADAGREEN POWER</span>
+          <span className="text-gradient" style={{ fontSize: '1.4rem' }}>MADAGREEN POWER</span>
         </div>
 
         <div className="nav-actions">
-          {isProd && <span className="mobile-hide" style={{ color: 'var(--accent)', fontSize: '0.75rem', fontWeight: 'bold', marginRight: '1rem' }}>🟢 PROD DB</span>}
-          <button className="btn-icon" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>
+          {isProd && (
+            <div className="badge badge-success mobile-hide" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span className="pulse" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)' }}></span>
+              PROD LIVE
+            </div>
+          )}
+
+          <button className="btn-icon" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Changer de thème">
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
 
           {isAuthenticated && (
-            <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               {selectedHub === 'hse' ? (
                 <>
                   <button
                     className="btn-icon"
                     onClick={() => syncData()}
                     disabled={isSyncing}
-                    style={{ color: isOnline ? 'var(--accent)' : 'var(--text-dim)', marginRight: '10px' }}
-                    title="Synchroniser avec le serveur"
+                    style={{ color: isOnline ? 'var(--accent)' : 'var(--text-muted)' }}
+                    title="Synchroniser les données"
                   >
-                    <span className={isSyncing ? 'animate-spin' : ''} style={{ display: 'inline-block' }}>☁️</span>
+                    <span className={isSyncing ? 'animate-spin' : ''}>☁️</span>
                   </button>
-                  <span className="user-badge">
-                    <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>{currentUser?.email}</span>&nbsp;({currentUser?.role})
-                  </span>
-                  <button className={`btn-secondary nav-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => setEmployeeView('list')}>Employés</button>
-                  {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
-                    <button className={`btn-secondary nav-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => setEmployeeView('settings')}>Paramètres</button>
-                  )}
-                  <button className={`btn-secondary nav-btn logout-btn ${employeeView !== 'list' ? 'mobile-hide' : ''}`} onClick={() => {
-                    setIsAuthenticated(false);
-                    setCurrentUser(null);
-                    setSelectedHub(null);
-                    localStorage.removeItem('hse_isAuthenticated');
-                    localStorage.removeItem('hse_currentUser');
-                    localStorage.removeItem('hse_selectedHub');
-                  }}>Déconnexion</button>
+
+                  <div className="user-badge mobile-hide" style={{ background: 'var(--bg-card)', padding: '0.4rem 1rem', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-glass)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)' }}></div>
+                    <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>{currentUser?.role}</span>
+                  </div>
+
+                  <div className="mobile-hide" style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button className="btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }} onClick={() => setEmployeeView('list')}>Employés</button>
+                    {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
+                      <button className="btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }} onClick={() => setEmployeeView('settings')}>⚙️ Paramètres</button>
+                    )}
+                  </div>
+                  <div className="mobile-show">
+                    {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
+                      <button className="btn-icon" onClick={() => setEmployeeView('settings')}>⚙️</button>
+                    )}
+                  </div>
                 </>
-              ) : (
+              ) : selectedHub === 'projet' ? (
                 <>
                   <button
                     className="btn-icon"
                     onClick={() => syncData()}
                     disabled={isSyncing}
-                    style={{ color: isOnline ? '#3b82f6' : 'var(--text-dim)', marginRight: '10px' }}
-                    title="Actualiser les données"
+                    style={{ color: isOnline ? 'var(--info)' : 'var(--text-muted)' }}
+                    title="Actualiser"
                   >
-                    <span className={isSyncing ? 'animate-spin' : ''} style={{ display: 'inline-block' }}>☁️</span>
+                    <span className={isSyncing ? 'animate-spin' : ''}>☁️</span>
                   </button>
-                  <button className={`btn-secondary nav-btn`} style={{ color: projetView === 'projet' ? '#3b82f6' : '' }} onClick={() => setProjetView('projet')}>Projet</button>
-                  {currentUser?.role === 'Super Admin' && (
-                    <button className={`btn-secondary nav-btn`} style={{ color: projetView === 'materiels' ? '#3b82f6' : '' }} onClick={() => setProjetView('materiels')}>Matériels</button>
-                  )}
-                  {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
-                    <button className={`btn-secondary nav-btn`} style={{ color: projetView === 'parametres' ? '#3b82f6' : '' }} onClick={() => setProjetView('parametres')}>Paramètres</button>
-                  )}
-                  <span className="user-badge mobile-hide">
-                    <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>{currentUser?.email}</span>
-                  </span>
-                  <button className="btn-secondary nav-btn logout-btn" onClick={() => {
-                    setIsAuthenticated(false);
-                    setCurrentUser(null);
-                    setSelectedHub(null);
-                    localStorage.removeItem('hse_isAuthenticated');
-                    localStorage.removeItem('hse_currentUser');
-                    localStorage.removeItem('hse_selectedHub');
-                  }}>Déconnexion</button>
+
+                  <div className="mobile-hide" style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button className="btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', borderColor: projetView === 'projet' ? 'var(--info)' : '' }} onClick={() => setProjetView('projet')}>Projets</button>
+                    {currentUser?.role === 'Super Admin' && (
+                      <button className="btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', borderColor: projetView === 'materiels' ? 'var(--info)' : '' }} onClick={() => setProjetView('materiels')}>Matériels</button>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
+                      <div style={{ position: 'relative' }}>
+                        <button className="btn-icon" onClick={() => setShowNotifications(!showNotifications)} style={{ position: 'relative', border: showNotifications ? '1px solid var(--info)' : '' }}>
+                          🔔
+                          {notifications.filter(n => !n.read).length > 0 && (
+                            <span style={{ position: 'absolute', top: '-5px', right: '-5px', background: 'var(--danger)', color: 'white', borderRadius: '50%', width: '14px', height: '14px', fontSize: '0.55rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900' }}>
+                              {notifications.filter(n => !n.read).length}
+                            </span>
+                          )}
+                        </button>
+
+                        {showNotifications && (
+                          <div className="glass-panel animate-fade-in" style={{ position: 'absolute', top: '100%', right: 0, width: '320px', zIndex: 1000, marginTop: '10px', padding: '1.5rem', maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--border-glass)', boxShadow: 'var(--shadow-lg)', textAlign: 'left' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                              <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-primary)' }}>Flux d'activités</h3>
+                              <button style={{ background: 'none', border: 'none', color: 'var(--info)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '700' }} onClick={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}>Tout lire</button>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                              {notifications.length === 0 ? (
+                                <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '2rem 0' }}>Aucune notification récente</div>
+                              ) : (
+                                notifications.map(n => (
+                                  <div key={n.id} style={{ padding: '0.85rem', borderRadius: '10px', background: n.read ? 'rgba(255,255,255,0.02)' : 'rgba(var(--info-rgb), 0.08)', borderLeft: `3px solid ${n.type === 'success' ? 'var(--accent)' : 'var(--info)'}`, transition: 'all 0.2s' }}>
+                                    <div style={{ fontSize: '0.8rem', fontWeight: '800', marginBottom: '0.2rem', color: 'var(--text-primary)' }}>{n.title}</div>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>{n.message}</div>
+                                    <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '0.4rem', fontWeight: '700', textTransform: 'uppercase' }}>{n.date}</div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                            {notifications.length > 0 && (
+                              <button className="btn-secondary" style={{ width: '100%', marginTop: '1.25rem', padding: '0.5rem', fontSize: '0.7rem' }} onClick={() => setNotifications([])}>Vider l'historique</button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
+                      <button className="btn-icon" onClick={() => setProjetView('parametres')}>⚙️</button>
+                    )}
+                  </div>
                 </>
-              )}
-            </>
+              ) : null}
+
+              <button className="btn-primary" style={{ background: 'var(--danger)', boxShadow: 'none', padding: '0.5rem 1rem', fontSize: '0.85rem' }} onClick={() => {
+                setIsAuthenticated(false);
+                setCurrentUser(null);
+                setSelectedHub(null);
+                localStorage.removeItem('hse_isAuthenticated');
+                localStorage.removeItem('hse_currentUser');
+                localStorage.removeItem('hse_selectedHub');
+              }}>Quitter</button>
+            </div>
           )}
         </div>
       </nav>
 
-      <main className="container" style={!isAuthenticated ? { padding: 0 } : {}}>
-        {!isAuthenticated ? (
-          <div className="login-wrapper" style={{
-            minHeight: '100vh',
-            backgroundImage: `url(${mgpBg})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-            position: 'fixed',
-            top: 0, left: 0, right: 0, bottom: 0,
-            zIndex: 1000,
+      <main className="container" style={!isAuthenticated ? { padding: 0, maxWidth: 'none' } : {}}>
+        {(!isAuthenticated || !selectedHub) ? (
+          <div className={`login-screen ${theme}`} style={{
             display: 'flex',
-            flexWrap: 'wrap',
-            overflowY: 'auto'
+            width: '100vw',
+            height: '100vh',
+            background: 'var(--bg-main)',
+            overflow: 'hidden',
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            zIndex: 1000,
+            transition: 'background 0.5s ease'
           }}>
-            {/* Left branding panel */}
-            <div className="login-branding" style={{
-              flex: '1 1 300px',
+            {/* Left Side: Visual Branding */}
+            <div style={{
+              flex: '1.4',
+              position: 'relative',
+              backgroundImage: `url(${mgpBg})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'flex-end',
-              padding: '2rem',
-              background: 'linear-gradient(to top, rgba(3,8,18,0.85) 0%, transparent 60%)',
-              minHeight: '40vh'
-            }}>
-              <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3rem)', fontWeight: '900', lineHeight: 1.1, marginBottom: '0.5rem', color: '#fff' }}>
-                HSE Safety Tools
-              </h1>
-              <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.9rem', maxWidth: '380px', lineHeight: 1.5 }}>
-                Plateforme de gestion des habilitations et certifications sécurité pour Madagreen Power.
-              </p>
+              padding: '5rem'
+            }} className="mobile-hide">
+              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, var(--bg-main) 0%, transparent 70%)', opacity: 0.8 }}></div>
+              <div style={{ position: 'relative', zIndex: 1, color: 'white' }}>
+                <h1 style={{ fontSize: '4.5rem', fontWeight: '900', marginBottom: '1.5rem', lineHeight: 1, letterSpacing: '-0.04em' }}>HSE Safety <br />Tools</h1>
+                <p style={{ fontSize: '1.25rem', maxWidth: '520px', opacity: 0.85, marginBottom: '4rem', lineHeight: 1.6 }}>
+                  Plateforme intelligente de gestion des habilitations et de la conformité sécurité pour Madagreen Power.
+                </p>
 
-              <div style={{ display: 'flex', gap: '1.5rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
-                {[['🛡️', 'HSE'], ['📋', 'Dossiers'], ['🎫', 'Passeports']].map(([icon, label]) => (
-                  <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
-                    <span style={{ fontSize: '1.4rem' }}>{icon}</span>
-                    <span style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', letterSpacing: '1px' }}>{label}</span>
-                  </div>
-                ))}
+                <div style={{ display: 'flex', gap: '4rem' }}>
+                  <div style={{ textAlign: 'center' }}><div style={{ fontSize: '1.8rem', marginBottom: '0.75rem' }}>🛡️</div><div style={{ fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Sécurité</div></div>
+                  <div style={{ textAlign: 'center' }}><div style={{ fontSize: '1.8rem', marginBottom: '0.75rem' }}>📋</div><div style={{ fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Dossiers</div></div>
+                  <div style={{ textAlign: 'center' }}><div style={{ fontSize: '1.8rem', marginBottom: '0.75rem' }}>🎫</div><div style={{ fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Passeports</div></div>
+                </div>
               </div>
             </div>
 
-            {/* Right login panel */}
-            <div className="login-panel animate-slide-up" style={{
-              flex: '1 1 400px',
+            {/* Right Side: Authentication/Hub */}
+            <div style={{
+              flex: '1',
               display: 'flex',
-              flexDirection: 'column',
+              alignItems: 'center',
               justifyContent: 'center',
-              padding: '2rem',
-              background: 'rgba(5, 10, 22, 0.85)',
-              backdropFilter: 'blur(24px)',
-              borderLeft: '1px solid rgba(255,255,255,0.1)'
+              background: 'var(--bg-main)',
+              position: 'relative',
+              padding: '3rem',
+              borderLeft: '1px solid var(--border-glass)'
             }}>
-              <div className="glass-panel" style={{ padding: '2.5rem', maxWidth: '420px', width: '100%', margin: '0 auto' }}>
+
+              <div className="glass-panel animate-fade-in" style={{
+                maxWidth: '480px',
+                width: '100%',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border-glass-bright)',
+                padding: '4rem',
+                borderRadius: '35px',
+                boxShadow: 'var(--shadow-glass)'
+              }}>
                 {!selectedHub ? (
-                  <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <p style={{ color: 'var(--primary)', fontSize: '0.7rem', fontWeight: '700', letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Portail Sécurisé</p>
-                    <h2 style={{ fontSize: '1.6rem', fontWeight: '800', marginBottom: '0.5rem' }}>Hub d'Applications</h2>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '1.5rem', lineHeight: '1.5' }}>Veuillez sélectionner l'environnement auquel vous souhaitez accéder.</p>
-
-                    <button
-                      onClick={() => { setSelectedHub('hse'); localStorage.setItem('hse_selectedHub', 'hse'); }}
-                      style={{ background: 'var(--card-bg-light)', border: '2px solid transparent', borderRadius: '12px', padding: '1.5rem', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.3s ease' }}
-                    >
-                      <div style={{ fontSize: '2rem' }}>🛡️</div>
-                      <div>
-                        <div style={{ fontSize: '1.1rem', fontWeight: '800', color: 'white', marginBottom: '0.2rem' }}>HSE Passport</div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Habilitations & Sécurité</div>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={() => { setSelectedHub('projet'); localStorage.setItem('hse_selectedHub', 'projet'); }}
-                      style={{ background: 'var(--card-bg-medium)', border: '2px solid transparent', borderRadius: '12px', padding: '1.5rem', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'all 0.3s ease' }}
-                    >
-                      <div style={{ fontSize: '2rem' }}>🏗️</div>
-                      <div>
-                        <div style={{ fontSize: '1.1rem', fontWeight: '800', color: 'white', marginBottom: '0.2rem' }}>Gestion de Projet</div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Suivi Chantier & Logistique</div>
-                      </div>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="animate-slide-up">
-                    <button onClick={() => { setSelectedHub(null); localStorage.removeItem('hse_selectedHub'); }} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 0, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
-                      <span>←</span> Retour au Hub
-                    </button>
-
-                    <div style={{ display: 'inline-block', background: selectedHub === 'hse' ? 'var(--accent-glow)' : 'rgba(59, 130, 246, 0.2)', color: selectedHub === 'hse' ? 'var(--accent)' : '#3b82f6', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 'bold', fontSize: '0.7rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '1rem' }}>
-                      {selectedHub === 'hse' ? '🛡️ Module HSE' : '🏗️ Module Projet'}
+                  <div className="animate-fade-in">
+                    <div style={{ marginBottom: '3rem' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: '900', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '1.25rem' }}>Portail Sécurisé</div>
+                      <h2 style={{ fontSize: '2.2rem', fontWeight: '900', margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Hub d'Applications</h2>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginTop: '1rem', lineHeight: 1.5 }}>Veuillez sélectionner l'environnement de travail pour continuer.</p>
                     </div>
 
-                    <h2 style={{ fontSize: '1.8rem', fontWeight: '800', marginBottom: '0.5rem' }}>Connexion</h2>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '2rem' }}>Identifiez-vous pour accéder au système.</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                      <button
+                        className="glass-card hub-btn"
+                        style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', cursor: 'pointer', padding: '1.75rem', textAlign: 'left', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)' }}
+                        onClick={() => { setSelectedHub('hse'); localStorage.setItem('hse_selectedHub', 'hse'); }}
+                      >
+                        <div style={{ width: '55px', height: '55px', borderRadius: '16px', background: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.75rem' }}>🛡️</div>
+                        <div>
+                          <div style={{ fontWeight: '800', fontSize: '1.2rem', color: 'var(--text-primary)' }}>HSE Passport</div>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>Habilitations & Sécurité</div>
+                        </div>
+                      </button>
 
-                    <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                      <button
+                        className="glass-card hub-btn"
+                        style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', cursor: 'pointer', padding: '1.75rem', textAlign: 'left', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)' }}
+                        onClick={() => { setSelectedHub('projet'); localStorage.setItem('hse_selectedHub', 'projet'); }}
+                      >
+                        <div style={{ width: '55px', height: '55px', borderRadius: '16px', background: 'var(--accent-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.75rem' }}>🏗️</div>
+                        <div>
+                          <div style={{ fontWeight: '800', fontSize: '1.2rem', color: 'var(--text-primary)' }}>Gestion de Projet</div>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>Suivi Chantier & Logistique</div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="animate-fade-in">
+                    <div style={{ marginBottom: '3rem' }}>
+                      <button
+                        onClick={() => setSelectedHub(null)}
+                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontWeight: '700', cursor: 'pointer', fontSize: '0.85rem', marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'color 0.2s' }}
+                      >
+                        ← Retour au Hub
+                      </button>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.25rem', borderRadius: '12px', background: 'var(--accent-glow)', color: 'var(--accent)', fontSize: '0.75rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2rem' }}>
+                        <span>🛡️</span> Module {selectedHub === 'hse' ? 'HSE' : 'Projet'}
+                      </div>
+                      <h2 style={{ fontSize: '2.8rem', fontWeight: '900', margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>Connexion</h2>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginTop: '1rem' }}>Identifiez-vous pour accéder à vos outils.</p>
+                    </div>
+
+                    <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
                       <div>
-                        <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-dim)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Adresse Email</label>
-                        <input
-                          type="email" name="email"
-                          placeholder="admin@madagreen.com"
-                          required
-                          style={{
-                            width: '100%', background: 'rgba(255,255,255,0.03)', border: 'none',
-                            borderBottom: '2px solid rgba(255,255,255,0.1)',
-                            color: 'white', fontSize: '1rem', padding: '0.8rem 0',
-                            outline: 'none', boxSizing: 'border-box'
-                          }}
-                        />
+                        <label className="input-label" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Adresse Email</label>
+                        <input type="email" name="email" className="glass-input" placeholder="admin@madagreen.com" required style={{ background: 'var(--bg-input)' }} />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-dim)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Mot de passe</label>
-                        <input
-                          type="password" name="password"
-                          placeholder="••••••••"
-                          required
-                          style={{
-                            width: '100%', background: 'rgba(255,255,255,0.03)', border: 'none',
-                            borderBottom: '2px solid rgba(255,255,255,0.1)',
-                            color: 'white', fontSize: '1rem', padding: '0.8rem 0',
-                            outline: 'none', boxSizing: 'border-box'
-                          }}
-                        />
+                        <label className="input-label" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Mot de Passe</label>
+                        <input type="password" name="password" className="glass-input" placeholder="••••••••" required style={{ background: 'var(--bg-input)' }} />
                       </div>
-                      <button type="submit" className="btn-primary" style={{ marginTop: '1rem', width: '100%', background: selectedHub === 'hse' ? 'var(--primary)' : '#3b82f6', justifyContent: 'center', borderColor: 'transparent' }}>
+                      <button type="submit" className="btn-primary" style={{ marginTop: '1.5rem', width: '100%', height: '60px', fontSize: '1.1rem', borderRadius: '18px', fontWeight: '800' }}>
                         Se connecter →
                       </button>
                     </form>
                   </div>
                 )}
 
-                <p style={{ marginTop: '2.5rem', fontSize: '0.7rem', color: 'var(--text-dim)', textAlign: 'center' }}>
-                  © {new Date().getFullYear()} Madagreen Power — Tous droits réservés
-                </p>
+                <div style={{ marginTop: '4rem', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', opacity: 0.7, fontWeight: '600' }}>
+                  © {new Date().getFullYear()} Madagreen Power — Portail de Gestion Intégrée
+                </div>
               </div>
             </div>
           </div>
         ) : selectedHub === 'projet' ? (
           <div className="animate-fade-in">
             {projetView === 'projet' && (
-              <div>
+              <div className="animate-fade-in">
                 <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-                    <h2 style={{ fontSize: '1.3rem', margin: 0 }}>Liste des Projets</h2>
-                    <button className="btn-primary" onClick={() => setProjetView('addProjet')}>+ Nouveau Projet</button>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.5rem' }}>
+                    <div>
+                      <h2 style={{ margin: 0, fontSize: '1.5rem' }}>Tableau de Bord Projets</h2>
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>Vue d'ensemble et gestion opérationnelle</p>
+                    </div>
+                    {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
+                      <button className="btn-primary" onClick={() => { setProjetView('addProjet'); setProjetWizardStep(1); }}>+ Nouveau Projet</button>
+                    )}
                   </div>
                 </div>
+
                 {projets.length === 0 ? (
-                  <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
-                    <p style={{ color: 'var(--text-dim)' }}>Aucun projet enregistré pour le moment.</p>
+                  <div className="glass-panel" style={{ padding: '4rem', textAlign: 'center' }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🏗️</div>
+                    <p style={{ color: 'var(--text-muted)' }}>Aucun projet actif. Cliquez sur "Lancer un Projet" pour démarrer.</p>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
                     {projets.map((p, i) => (
-                      <div key={i} className="glass-panel" style={{ padding: '1.5rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-                          <div>
-                            <div style={{ fontWeight: '700', fontSize: '1.1rem' }}>{p.nomChantier}</div>
-                            <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginTop: '0.25rem' }}>{p.lieu} — <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>Resp: {p.responsableChantier || 'N/A'}</span></div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <span>Début: {p.dateDebut}</span>
-                              <span style={{ background: 'var(--primary-glow)', color: 'var(--primary)', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
-                                {calculateProjectDuration(p.dateDebut)}
-                              </span>
-                              <span>— {p.intervenants?.length || 0} intervenant(s)</span>
-                              {p.outillageCaisse && <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>• 📦 {p.outillageCaisse}</span>}
+                      <div key={i} className="glass-card" style={{ padding: '2rem', borderLeft: '4px solid var(--info)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                            <div style={{ width: '60px', height: '60px', borderRadius: '15px', background: 'var(--info-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>🏗️</div>
+                            <div>
+                              <h3 style={{ margin: 0, fontSize: '1.25rem' }}>{p.nomChantier}</h3>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.4rem' }}>
+                                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>📍 {p.lieu}</span>
+                                <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>Resp: {p.responsableChantier}</span>
+                              </div>
                             </div>
                           </div>
-                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }} onClick={() => {
-                              setProjetFormData({
-                                nomChantier: p.nomChantier,
-                                lieu: p.lieu,
-                                dateDebut: p.dateDebut,
-                                outillageCaisse: p.outillageCaisse || '',
-                                responsableChantier: p.responsableChantier || '',
-                                epc: p.epc || { ...INITIAL_EPC }
-                              })
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '1px', fontWeight: '700' }}>Statut Chantier</div>
+                            <div style={{ color: 'var(--info)', fontWeight: '800', fontSize: '1rem', marginTop: '0.2rem' }}>EN COURS</div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-glass)' }}>
+                          <div style={{ display: 'flex', gap: '2rem' }}>
+                            <div>
+                              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Début</div>
+                              <div style={{ fontWeight: '700', fontSize: '0.9rem' }}>{p.dateDebut}</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Intervenants</div>
+                              <div style={{ fontWeight: '700', fontSize: '0.9rem' }}>{p.intervenants?.length || 0} Pers.</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Matériel</div>
+                              <div style={{ fontWeight: '700', fontSize: '0.9rem', color: p.outillageCaisse ? 'var(--info)' : 'var(--text-muted)' }}>{p.outillageCaisse || 'Aucun'}</div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button className="btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.8rem' }} onClick={() => {
+                              setProjetFormData({ ...p });
                               setProjetIntervenants(p.intervenants || [])
                               setProjetView('detailProjet')
                               setSelectedProjetIndex(i)
                             }}>Détails</button>
-                            <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }} onClick={() => {
-                              setProjetFormData({
-                                nomChantier: p.nomChantier,
-                                lieu: p.lieu,
-                                dateDebut: p.dateDebut,
-                                outillageCaisse: p.outillageCaisse || '',
-                                responsableChantier: p.responsableChantier || '',
-                                epc: p.epc || { ...INITIAL_EPC }
-                              })
+                            <button className="btn-icon" onClick={() => {
+                              setProjetFormData({ ...p });
                               setProjetIntervenants(p.intervenants || [])
                               setSelectedProjetIndex(i)
                               setProjetWizardStep(1)
                               setProjetView('editProjet')
-                            }}>Modifier</button>
-                            <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', color: 'var(--danger)' }} onClick={async () => {
-                              if (!isOnline) {
-                                showToast("Désolé, connexion internet requise pour supprimer", "danger")
-                                return
-                              }
+                            }}>✎</button>
+                            <button className="btn-icon" style={{ color: 'var(--danger)' }} onClick={async () => {
+                              if (!isOnline) { showToast("Connexion internet requise", "danger"); return; }
                               try {
-                                showToast("Suppression sur le serveur...", "info")
+                                showToast("Suppression...", "info")
                                 const res = await apiCall('DELETE', `/projets?nomChantier=${encodeURIComponent(p.nomChantier)}`)
-
                                 if (res.status === 200) {
                                   const updated = projets.filter((_, idx) => idx !== i)
-                                  setProjets(updated)
-                                  safeStorage.setItem('gp_projets_v1', JSON.stringify(updated))
-                                  showToast('Projet supprimé du serveur')
-                                } else {
-                                  showToast(`Échec (Code: ${res.status}): ` + (res.data?.error || "Erreur serveur"), "danger")
-                                }
-                              } catch (e) {
-                                showToast(e.message, "danger")
-                              }
-                            }}>Supprimer</button>
+                                  setProjets(updated); safeStorage.setItem('gp_projets_v1', JSON.stringify(updated));
+                                  showToast('Projet supprimé');
+                                } else { showToast("Erreur lors de la suppression", "danger"); }
+                              } catch (e) { showToast(e.message, "danger"); }
+                            }}>🗑</button>
                           </div>
                         </div>
                       </div>
@@ -997,212 +1101,130 @@ function App() {
               </div>
             )}
             {projetView === 'addProjet' && (
-              <div className="glass-panel animate-slide-up" style={{ maxWidth: '600px', margin: '0 auto', padding: '3rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1.5rem' }}>
+              <div className="glass-panel animate-fade-in" style={{ maxWidth: '800px', margin: '0 auto', padding: '3rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1rem' }}>
                   <button className="btn-icon" onClick={() => {
-                    if (projetWizardStep > 1) {
-                      setProjetWizardStep(projetWizardStep - 1)
-                    } else {
-                      setProjetView('projet');
-                      resetProjetForm();
-                      setProjetIntervenants([]);
-                    }
+                    if (projetWizardStep > 1) setProjetWizardStep(projetWizardStep - 1);
+                    else { setProjetView('projet'); resetProjetForm(); setProjetIntervenants([]); }
                   }}>←</button>
-                  <h2>Nouveau Projet</h2>
+                  <h2 style={{ margin: 0 }}>Nouveau Projet</h2>
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem' }}>
-                  <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: 'var(--primary)' }}></div>
-                  <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: projetWizardStep >= 2 ? 'var(--primary)' : 'rgba(255,255,255,0.1)' }}></div>
-                  <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: projetWizardStep >= 3 ? 'var(--primary)' : 'rgba(255,255,255,0.1)' }}></div>
+                {/* Modern Step Indicator */}
+                <div style={{ display: 'flex', gap: '1rem', marginBottom: '3rem' }}>
+                  {[1, 2, 3].map(step => (
+                    <div key={step} style={{ flex: 1 }}>
+                      <div style={{ height: '4px', borderRadius: '2px', background: projetWizardStep >= step ? 'var(--info)' : 'var(--bg-card)', transition: 'all 0.3s' }}></div>
+                      <div style={{ fontSize: '0.65rem', color: projetWizardStep === step ? 'var(--info)' : 'var(--text-muted)', fontWeight: '800', marginTop: '0.5rem', textTransform: 'uppercase' }}>
+                        Étape {step}
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
                 {projetWizardStep === 1 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Étape 1/3 — Informations du projet</p>
-                    <div>
-                      <label className="input-label">Nom du Chantier</label>
-                      <input type="text" className="glass-input" placeholder="Ex: Chantier Toamasina" value={projetFormData.nomChantier} onChange={e => setProjetFormData({ ...projetFormData, nomChantier: e.target.value })} />
+                  <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                    <div className="glass-card" style={{ padding: '2rem', display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
+                      <h3 style={{ fontSize: '1rem', color: 'var(--info)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Détails du Chantier</h3>
+                      <div><label className="input-label">Nom du Projet / Chantier</label><input type="text" className="glass-input" placeholder="Ex: Centrale Solaire Majunga" value={projetFormData.nomChantier} onChange={e => setProjetFormData({ ...projetFormData, nomChantier: e.target.value })} /></div>
+                      <div><label className="input-label">Localisation</label><input type="text" className="glass-input" placeholder="Ex: Majunga, Madagascar" value={projetFormData.lieu} onChange={e => setProjetFormData({ ...projetFormData, lieu: e.target.value })} /></div>
+                      <div><label className="input-label">Date de Lancement</label><input type="date" className="glass-input" value={projetFormData.dateDebut} onChange={e => setProjetFormData({ ...projetFormData, dateDebut: e.target.value })} /></div>
                     </div>
-                    <div>
-                      <label className="input-label">Lieu</label>
-                      <input type="text" className="glass-input" placeholder="Ex: Antananarivo" value={projetFormData.lieu} onChange={e => setProjetFormData({ ...projetFormData, lieu: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="input-label">Date de début</label>
-                      <input type="date" className="glass-input" value={projetFormData.dateDebut} onChange={e => setProjetFormData({ ...projetFormData, dateDebut: e.target.value })} />
-                    </div>
-
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }}
-                      disabled={!projetFormData.nomChantier || !projetFormData.lieu || !projetFormData.dateDebut}
-                      onClick={() => setProjetWizardStep(2)}
-                    >Suivant →</button>
+                    <button className="btn-primary" style={{ height: '50px', justifyContent: 'center' }} disabled={!projetFormData.nomChantier || !projetFormData.lieu || !projetFormData.dateDebut} onClick={() => setProjetWizardStep(2)}>Suivant : Équipe & Responsable →</button>
                   </div>
                 )}
 
                 {projetWizardStep === 2 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Étape 2/3 — Responsable et Intervenants</p>
-
-                    <div>
-                      <label className="input-label">Responsable Chantier (HSE Passport)</label>
-                      <select
-                        className="glass-input"
-                        value={projetFormData.responsableChantier}
-                        onChange={e => setProjetFormData({ ...projetFormData, responsableChantier: e.target.value })}
-                      >
-                        <option value="">Sélectionner le responsable du chantier...</option>
-                        {employees.map(emp => (
-                          <option key={emp.matricule} value={emp.name}>{emp.name}</option>
-                        ))}
-                      </select>
+                  <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                    <div className="glass-card" style={{ padding: '2rem' }}>
+                      <h3 style={{ fontSize: '1rem', color: 'var(--info)', textTransform: 'uppercase', marginBottom: '1.5rem' }}>Direction du Chantier</h3>
+                      <div>
+                        <label className="input-label">Responsable Principal</label>
+                        <select className="glass-input" value={projetFormData.responsableChantier} onChange={e => setProjetFormData({ ...projetFormData, responsableChantier: e.target.value })}>
+                          <option value="">Sélectionner parmi le personnel...</option>
+                          {employees.map(emp => (<option key={emp.matricule} value={emp.name}>{emp.name}</option>))}
+                        </select>
+                      </div>
                     </div>
 
-                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
-                      <label className="input-label">Liste des Intervenants ({projetIntervenants.length})</label>
+                    <div className="glass-card" style={{ padding: '2rem' }}>
+                      <h3 style={{ fontSize: '1rem', color: 'var(--info)', textTransform: 'uppercase', marginBottom: '1.5rem' }}>Équipe d'Intervention ({projetIntervenants.length})</h3>
                       {projetIntervenants.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem' }}>
                           {projetIntervenants.map((intv, i) => (
-                            <span key={i} style={{ background: 'var(--primary-glow)', color: 'var(--primary)', padding: '0.3rem 0.8rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span key={i} className="badge badge-info" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}>
                               {intv.name}
-                              <span style={{ cursor: 'pointer', opacity: 0.7 }} onClick={() => setProjetIntervenants(prev => prev.filter((_, idx) => idx !== i))}>✕</span>
+                              <span style={{ cursor: 'pointer', fontWeight: 'bold' }} onClick={() => setProjetIntervenants(prev => prev.filter((_, idx) => idx !== i))}>×</span>
                             </span>
                           ))}
                         </div>
                       )}
-
                       <div style={{ position: 'relative' }}>
-                        <input type="text" className="glass-input" placeholder="Ajouter des intervenants..." value={intervenantSearch} onChange={e => setIntervenantSearch(e.target.value)} />
+                        <label className="input-label">Rechercher des membres</label>
+                        <input type="text" className="glass-input" placeholder="Nom ou matricule..." value={intervenantSearch} onChange={e => setIntervenantSearch(e.target.value)} />
                         {intervenantSearch.trim().length > 0 && (
-                          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, background: 'var(--bg-deep)', border: '1px solid var(--glass-border)', borderRadius: '12px', marginTop: '5px', maxHeight: '200px', overflowY: 'auto', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
-                            {employees
-                              .filter(emp => !projetIntervenants.some(intv => intv.matricule === emp.matricule))
-                              .filter(emp => emp.name.toLowerCase().includes(intervenantSearch.toLowerCase()) || emp.matricule.toLowerCase().includes(intervenantSearch.toLowerCase()))
-                              .map(emp => (
-                                <div
-                                  key={emp.matricule}
-                                  onClick={() => { setProjetIntervenants(prev => [...prev, { matricule: emp.matricule, name: emp.name, role: emp.role }]); setIntervenantSearch('') }}
-                                  style={{ padding: '0.8rem 1rem', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)' }}
-                                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                >
-                                  <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{emp.name}</div>
-                                  <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>{emp.role}</div>
-                                </div>
-                              ))
-                            }
+                          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, background: 'var(--bg-main)', border: '1px solid var(--border-glass)', borderRadius: '12px', marginTop: '5px', maxHeight: '200px', overflowY: 'auto', boxShadow: 'var(--shadow-lg)' }}>
+                            {employees.filter(emp => !projetIntervenants.some(intv => intv.matricule === emp.matricule)).filter(emp => emp.name.toLowerCase().includes(intervenantSearch.toLowerCase()) || emp.matricule.toLowerCase().includes(intervenantSearch.toLowerCase())).map(emp => (
+                              <div key={emp.matricule} onClick={() => { setProjetIntervenants(prev => [...prev, { matricule: emp.matricule, name: emp.name, role: emp.role }]); setIntervenantSearch('') }} style={{ padding: '0.8rem 1.25rem', cursor: 'pointer', borderBottom: '1px solid var(--border-glass)' }}>
+                                <div style={{ fontWeight: '700', fontSize: '0.9rem' }}>{emp.name}</div>
+                                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{emp.role}</div>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
                     </div>
-
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }}
-                      disabled={!projetFormData.responsableChantier}
-                      onClick={() => setProjetWizardStep(3)}
-                    >Suivant (Matériels) →</button>
+                    <button className="btn-primary" style={{ height: '50px', justifyContent: 'center' }} disabled={!projetFormData.responsableChantier} onClick={() => setProjetWizardStep(3)}>Suivant : Logistique & Matériel →</button>
                   </div>
                 )}
 
                 {projetWizardStep === 3 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Étape 3/3 — Matériels et Equipements</p>
-
-                    <div>
-                      <label className="input-label">Outillage (Sélection Caisse)</label>
-                      <select
-                        className="glass-input"
-                        value={projetFormData.outillageCaisse}
-                        onChange={e => setProjetFormData({ ...projetFormData, outillageCaisse: e.target.value })}
-                      >
-                        <option value="">Aucune caisse assignée...</option>
-                        {caisses.map(c => (
-                          <option key={c.numeroCaisse} value={c.numeroCaisse}>
-                            {c.numeroCaisse} — {c.affecterA}
-                          </option>
-                        ))}
-                      </select>
+                  <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                    <div className="glass-card" style={{ padding: '2rem' }}>
+                      <h3 style={{ fontSize: '1rem', color: 'var(--info)', textTransform: 'uppercase', marginBottom: '1.5rem' }}>Dotation Matérielle</h3>
+                      <div>
+                        <label className="input-label">Affectation Caisse Outillage</label>
+                        <select className="glass-input" value={projetFormData.outillageCaisse} onChange={e => setProjetFormData({ ...projetFormData, outillageCaisse: e.target.value })}>
+                          <option value="">Aucune caisse assignée...</option>
+                          {caisses.map(c => (<option key={c.numeroCaisse} value={c.numeroCaisse}>{c.numeroCaisse} — {c.affecterA}</option>))}
+                        </select>
+                      </div>
                     </div>
 
-                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
-                      <label className="input-label">Check-list EPC (Facultatif)</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
-                        {[
-                          { key: 'extincteurs', label: 'Extincteurs' },
-                          { key: 'balisage', label: 'Balisage' },
-                          { key: 'echafaudage', label: 'Échafaudage' },
-                          { key: 'gardecorps', label: 'Garde-corps' },
-                          { key: 'lignedevie', label: 'Lignes de vie' },
-                          { key: 'eclairage', label: 'Éclairage' },
-                          { key: 'kitantipollution', label: 'Anti-pollution' }
-                        ].map(({ key, label }) => (
-                          <div
-                            key={key}
-                            onClick={() => setProjetFormData({ ...projetFormData, epc: { ...projetFormData.epc, [key]: !projetFormData.epc[key] } })}
-                            style={{
-                              background: 'var(--card-bg-light)',
-                              padding: '0.75rem',
-                              borderRadius: '10px',
-                              cursor: 'pointer',
-                              border: projetFormData.epc[key] ? '1px solid var(--accent)' : '1px solid transparent',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.5rem',
-                              transition: 'all 0.3s'
-                            }}
-                          >
-                            <input type="checkbox" checked={projetFormData.epc[key] || false} onChange={() => { }} style={{ width: '16px', height: '16px' }} />
-                            <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>{label}</span>
+                    <div className="glass-card" style={{ padding: '2rem' }}>
+                      <h3 style={{ fontSize: '1rem', color: 'var(--info)', textTransform: 'uppercase', marginBottom: '1.5rem' }}>Sécurité Collective (EPC)</h3>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+                        {Object.keys(INITIAL_EPC).map(key => (
+                          <div key={key} onClick={() => setProjetFormData({ ...projetFormData, epc: { ...projetFormData.epc, [key]: !projetFormData.epc[key] } })} style={{ background: projetFormData.epc[key] ? 'var(--info-glow)' : 'var(--bg-main)', padding: '1rem', borderRadius: '12px', cursor: 'pointer', border: `1px solid ${projetFormData.epc[key] ? 'var(--info)' : 'var(--border-glass)'}`, display: 'flex', alignItems: 'center', gap: '0.75rem', transition: 'all 0.3s' }}>
+                            <div style={{ width: '18px', height: '18px', borderRadius: '4px', border: '2px solid var(--info)', background: projetFormData.epc[key] ? 'var(--info)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '0.7rem' }}>{projetFormData.epc[key] && '✓'}</div>
+                            <span style={{ fontSize: '0.85rem', fontWeight: '700' }}>{key.charAt(0).toUpperCase() + key.slice(1)}</span>
                           </div>
                         ))}
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }}
-                      onClick={async () => {
-                        const manager = employees.find(e => e.name === projetFormData.responsableChantier);
-                        let finalIntervenants = [...projetIntervenants];
-                        if (manager && !finalIntervenants.some(i => i.matricule === manager.matricule)) {
-                          finalIntervenants.push({ matricule: manager.matricule, name: manager.name, role: manager.role });
-                        }
-                        if (!isOnline) {
-                          showToast("Connexion internet requise pour créer un projet", "danger")
-                          return
-                        }
-
-                        const newProjet = {
-                          ...projetFormData,
-                          intervenants: finalIntervenants,
-                          dateCreation: new Date().toLocaleDateString('fr-FR')
-                        }
-
-                        try {
-                          showToast("Création du projet sur le serveur...", "info")
-                          const res = await apiCall('POST', '/projets', newProjet)
-
-                          if (res.status === 200) {
-                            const updated = [newProjet, ...projets]
-                            setProjets(updated)
-                            safeStorage.setItem('gp_projets_v1', JSON.stringify(updated))
-                            resetProjetForm()
-                            setProjetView('projet')
-                            showToast('Projet enregistré avec succès sur le serveur')
-                          } else {
-                            showToast("Échec de l'enregistrement sur le serveur", "danger")
-                          }
-                        } catch (e) {
-                          showToast(e.message, "danger")
-                        }
-                      }}
-                    >Finaliser et Créer le Projet</button>
+                    <button className="btn-primary" style={{ height: '60px', justifyContent: 'center', fontSize: '1.1rem' }} onClick={async () => {
+                      const manager = employees.find(e => e.name === projetFormData.responsableChantier);
+                      let finalIntervenants = [...projetIntervenants];
+                      if (manager && !finalIntervenants.some(i => i.matricule === manager.matricule)) finalIntervenants.push({ matricule: manager.matricule, name: manager.name, role: manager.role });
+                      if (!isOnline) { showToast("Connexion internet requise", "danger"); return; }
+                      const existingProj = selectedProjetIndex !== null ? projets[selectedProjetIndex] : {};
+                      const newProjet = {
+                        ...projetFormData,
+                        intervenants: finalIntervenants,
+                        dateCreation: existingProj.dateCreation || new Date().toLocaleDateString('fr-FR'),
+                        briefings: existingProj.briefings || []
+                      }
+                      try {
+                        showToast("Création en cours...", "info")
+                        const res = await apiCall('POST', '/projets', newProjet)
+                        if (res.status === 200) {
+                          const updated = [newProjet, ...projets]; setProjets(updated); safeStorage.setItem('gp_projets_v1', JSON.stringify(updated));
+                          resetProjetForm(); setProjetView('projet'); showToast('Projet créé avec succès');
+                          addNotification("Nouveau Projet", `Le projet "${newProjet.nomChantier}" a été créé par ${currentUser?.email}`, "success");
+                        } else { showToast("Erreur serveur", "danger"); }
+                      } catch (e) { showToast(e.message, "danger"); }
+                    }}>Lancer le Projet & Enregistrer</button>
                   </div>
                 )}
               </div>
@@ -1211,68 +1233,68 @@ function App() {
             {projetView === 'materiels' && (
               <div className="animate-fade-in">
                 <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-                    <h2 style={{ fontSize: '1.3rem', margin: 0 }}>Gestion des Caisses (Matériels)</h2>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.5rem' }}>
+                    <div>
+                      <h2 style={{ margin: 0, fontSize: '1.5rem' }}>Inventaire des Caisses</h2>
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>Gestion du matériel et de l'outillage mobile</p>
+                    </div>
                     <button className="btn-primary" onClick={() => {
                       setCaisseFormData({ numeroCaisse: '', affecterA: '', materiels: [] });
                       setProjetView('addCaisse');
-                    }}>+ Nouveau Caisse</button>
+                    }}>+ Nouvelle Caisse</button>
                   </div>
                 </div>
 
                 {caisses.length === 0 ? (
-                  <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
-                    <p style={{ color: 'var(--text-dim)' }}>Aucune caisse enregistrée.</p>
+                  <div className="glass-panel" style={{ padding: '4rem', textAlign: 'center' }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📦</div>
+                    <p style={{ color: 'var(--text-muted)' }}>Aucun matériel inventorié.</p>
                   </div>
                 ) : (
-                  <div className="responsive-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.5rem' }}>
                     {caisses.map((c, i) => (
-                      <div key={i} className="glass-panel animate-slide-up" style={{ padding: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                          <div>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px' }}>Numéro Caisse</div>
-                            <div style={{ fontWeight: '800', fontSize: '1.2rem', color: 'var(--primary)' }}>{c.numeroCaisse}</div>
-                          </div>
-                          <button className="btn-icon" onClick={async () => {
-                            if (!isOnline) {
-                              showToast("Connexion internet requise pour supprimer", "danger")
-                              return
-                            }
+                      <div key={i} className="glass-card" style={{ padding: '2rem', position: 'relative' }}>
+                        <div style={{ position: 'absolute', top: '1.5rem', right: '1.5rem' }}>
+                          <button className="btn-icon" style={{ color: 'var(--danger)' }} onClick={async () => {
+                            if (!isOnline) { showToast("Connexion internet requise", "danger"); return; }
                             try {
-                              showToast("Suppression caisse...", "info")
+                              showToast("Suppression...", "info")
                               const res = await apiCall('DELETE', `/caisses?numeroCaisse=${encodeURIComponent(c.numeroCaisse)}`)
-
                               if (res.status === 200) {
                                 const updated = caisses.filter((_, idx) => idx !== i);
-                                setCaisses(updated);
-                                safeStorage.setItem('gp_caisses_v1', JSON.stringify(updated));
-                                showToast('Caisse supprimée du serveur');
-                              } else {
-                                 showToast(`Échec (Code: ${res.status}): ` + (res.data?.error || "Erreur serveur"), "danger")
-                              }
-                            } catch (e) {
-                              showToast(e.message, "danger")
-                            }
-                          }} style={{ color: 'var(--danger)' }}>🗑</button>
+                                setCaisses(updated); safeStorage.setItem('gp_caisses_v1', JSON.stringify(updated));
+                                showToast('Caisse supprimée');
+                              } else { showToast("Échec de la suppression", "danger"); }
+                            } catch (e) { showToast(e.message, "danger"); }
+                          }}>🗑</button>
                         </div>
-                        <div style={{ marginBottom: '1rem' }}>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px' }}>Affecté à</div>
-                          <div style={{ fontWeight: '600' }}>{c.affecterA || 'Non assigné'}</div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem' }}>Matériels ({c.materiels?.length || 0})</div>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                            {c.materiels?.slice(0, 3).map((m, idx) => (
-                              <span key={idx} style={{ fontSize: '0.75rem', background: 'var(--card-bg-light)', padding: '2px 8px', borderRadius: '4px' }}>{m}</span>
-                            ))}
-                            {c.materiels?.length > 3 && <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>+{c.materiels.length - 3} de plus</span>}
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem' }}>
+                          <div style={{ width: '50px', height: '50px', background: 'var(--info-glow)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>📦</div>
+                          <div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Numéro Inventaire</div>
+                            <div style={{ fontWeight: '900', fontSize: '1.2rem', color: 'var(--info)' }}>{c.numeroCaisse}</div>
                           </div>
                         </div>
-                        <button className="btn-secondary" style={{ width: '100%', marginTop: '1.5rem', fontSize: '0.8rem' }} onClick={() => {
-                          setCaisseFormData(c);
-                          setSelectedProjetIndex(i);
-                          setProjetView('detailCaisse');
-                        }}>Détails complets</button>
+
+                        <div className="glass-card" style={{ background: 'var(--bg-main)', padding: '1rem', marginBottom: '1.5rem' }}>
+                          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Responsable Affecté</div>
+                          <div style={{ fontWeight: '700', fontSize: '1rem' }}>👤 {c.affecterA || 'Non assigné'}</div>
+                        </div>
+
+                        <div style={{ marginBottom: '2rem' }}>
+                          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Contenu ({c.materiels?.length || 0} articles)</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                            {c.materiels?.slice(0, 4).map((m, idx) => (
+                              <span key={idx} style={{ fontSize: '0.75rem', background: 'var(--bg-card)', padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--border-glass)' }}>{m}</span>
+                            ))}
+                            {c.materiels?.length > 4 && <span style={{ fontSize: '0.75rem', color: 'var(--info)', fontWeight: 'bold', alignSelf: 'center' }}>+{c.materiels.length - 4}</span>}
+                          </div>
+                        </div>
+
+                        <button className="btn-secondary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => {
+                          setCaisseFormData(c); setSelectedProjetIndex(i); setProjetView('detailCaisse');
+                        }}>Visualiser le Contenu</button>
                       </div>
                     ))}
                   </div>
@@ -1429,9 +1451,18 @@ function App() {
 
             {projetView === 'detailProjet' && selectedProjetIndex !== null && (
               <div className="glass-panel animate-slide-up" style={{ maxWidth: '600px', margin: '0 auto', padding: '3rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem' }}>
-                  <button className="btn-icon" onClick={() => setProjetView('projet')}>←</button>
-                  <h2>Détails du Projet</h2>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                    <button className="btn-icon" onClick={() => setProjetView('projet')}>←</button>
+                    <h2>Détails du Projet</h2>
+                  </div>
+                  <button className="btn-primary" style={{ background: 'var(--info)' }} onClick={() => {
+                    setBriefingFormData({ id: Date.now().toString(), topic: 'Briefing Sécurité Quotidien', date: new Date().toISOString().split('T')[0], responsable: projetFormData.responsableChantier, description: '', commentaires: '', intervenants: [...projetIntervenants] });
+                    setSelectedBriefingIndex(null);
+                    setProjetView('editBriefing');
+                  }}>
+                    + Nouveau Briefing
+                  </button>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                   <div><label className="input-label">Nom du Chantier</label><p style={{ margin: '0.25rem 0 0', fontWeight: '600', fontSize: '1rem' }}>{projetFormData.nomChantier}</p></div>
@@ -1485,6 +1516,60 @@ function App() {
                     )}
                   </div>
 
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem', marginTop: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                      <label className="input-label" style={{ margin: 0 }}>Safety Briefings ({projetFormData.briefings?.length || 0})</label>
+                      <button className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }} onClick={() => {
+                        const newBriefing = {
+                          id: Date.now().toString(),
+                          date: new Date().toISOString().split('T')[0],
+                          topic: 'Briefing Sécurité Quotidien',
+                          responsable: projetFormData.responsableChantier,
+                          intervenants: [...projetIntervenants]
+                        };
+                        setBriefingFormData(newBriefing);
+                        setSelectedBriefingIndex(null);
+                        setProjetView('editBriefing');
+                      }}>+ Nouveau Briefing</button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {projetFormData.briefings?.map((b, idx) => (
+                        <div key={b.id || idx} className="glass-card" style={{ padding: '1rem', background: 'var(--bg-main)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-glass)' }}>
+                          <div>
+                            <div style={{ fontWeight: '700', fontSize: '0.9rem' }}>{b.topic}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>📅 {b.date} — 👤 {b.responsable}</div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button className="btn-icon" style={{ width: '30px', height: '30px', fontSize: '0.8rem' }} onClick={() => {
+                              setBriefingFormData({ ...b });
+                              setSelectedBriefingIndex(idx);
+                              setProjetView('editBriefing');
+                            }}>✎</button>
+                            <button className="btn-icon" style={{ width: '30px', height: '30px', fontSize: '0.8rem', color: 'var(--danger)' }} onClick={() => {
+                              const updatedBriefings = projetFormData.briefings.filter((_, i) => i !== idx);
+                              const updatedProj = {
+                                ...projetFormData,
+                                intervenants: projetIntervenants,
+                                dateCreation: projets[selectedProjetIndex]?.dateCreation || new Date().toLocaleDateString('fr-FR'),
+                                briefings: updatedBriefings
+                              };
+                              const newList = [...projets];
+                              newList[selectedProjetIndex] = updatedProj;
+                              setProjets(newList);
+                              apiCall('POST', '/projets', updatedProj);
+                              setProjetFormData(updatedProj);
+                              showToast("Briefing supprimé");
+                            }}>🗑</button>
+                          </div>
+                        </div>
+                      ))}
+                      {(!projetFormData.briefings || projetFormData.briefings.length === 0) && (
+                        <p style={{ color: 'var(--text-dim)', fontSize: '0.8rem', textAlign: 'center', padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '10px' }}>Aucun briefing enregistré pour ce projet.</p>
+                      )}
+                    </div>
+                  </div>
+
                   <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem' }}>
                     <label className="input-label">Protections Collectives (EPC)</label>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginTop: '0.75rem' }}>
@@ -1505,6 +1590,235 @@ function App() {
                           </div>
                         );
                       })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {projetView === 'editBriefing' && selectedProjetIndex !== null && (
+              <div className="animate-fade-in" style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: '400px 1fr', gap: '2rem' }}>
+                {/* Form Side */}
+                <div className="glass-panel" style={{ padding: '2rem', height: 'fit-content', position: 'sticky', top: '100px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+                    <button className="btn-icon" onClick={() => setProjetView('detailProjet')}>←</button>
+                    <h2 style={{ fontSize: '1.2rem' }}>Éditer le Briefing</h2>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div>
+                      <label className="input-label">Sujet du Briefing</label>
+                      <input type="text" className="glass-input" value={briefingFormData.topic} onChange={e => setBriefingFormData({ ...briefingFormData, topic: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="input-label">Date</label>
+                      <input type="date" className="glass-input" value={briefingFormData.date} onChange={e => setBriefingFormData({ ...briefingFormData, date: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="input-label">Responsable Site (PM)</label>
+                      <select className="glass-input" value={briefingFormData.responsable} onChange={e => setBriefingFormData({ ...briefingFormData, responsable: e.target.value })}>
+                        {employees.map(emp => (<option key={emp.matricule} value={emp.name}>{emp.name}</option>))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="input-label">Description des points évoqués</label>
+                      <textarea className="glass-input" style={{ minHeight: '100px', resize: 'vertical' }} value={briefingFormData.description} onChange={e => setBriefingFormData({ ...briefingFormData, description: e.target.value })} placeholder="Détaillez les consignes partagées..." />
+                    </div>
+                    <div>
+                      <label className="input-label">Commentaires et points de vigilance</label>
+                      <textarea className="glass-input" style={{ minHeight: '100px', resize: 'vertical' }} value={briefingFormData.commentaires} onChange={e => setBriefingFormData({ ...briefingFormData, commentaires: e.target.value })} placeholder="Notes additionnelles ou risques spécifiques..." />
+                    </div>
+
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1rem' }}>
+                      <label className="input-label">Intervenants Présents ({briefingFormData.intervenants.length})</label>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '300px', overflowY: 'auto', marginBottom: '1rem' }}>
+                        {briefingFormData.intervenants.map((intv, i) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: '0.5rem 0.8rem', borderRadius: '8px', fontSize: '0.85rem' }}>
+                            <span>{intv.name}</span>
+                            <button style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }} onClick={() => setBriefingFormData({ ...briefingFormData, intervenants: briefingFormData.intervenants.filter((_, idx) => idx !== i) })}>✕</button>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ position: 'relative' }}>
+                        <input type="text" className="glass-input" placeholder="Ajouter un intervenant..." value={intervenantSearch} onChange={e => setIntervenantSearch(e.target.value)} />
+                        {intervenantSearch.trim().length > 0 && (
+                          <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, zIndex: 10, background: '#1e293b', border: '1px solid var(--border-glass)', borderRadius: '12px', marginBottom: '5px', maxHeight: '200px', overflowY: 'auto', boxShadow: '0 -10px 25px rgba(0,0,0,0.3)' }}>
+                            {employees.filter(emp => !briefingFormData.intervenants.some(intv => intv.matricule === emp.matricule)).filter(emp => emp.name.toLowerCase().includes(intervenantSearch.toLowerCase())).map(emp => (
+                              <div key={emp.matricule} onClick={() => { setBriefingFormData({ ...briefingFormData, intervenants: [...briefingFormData.intervenants, { matricule: emp.matricule, name: emp.name, role: emp.role }] }); setIntervenantSearch('') }} style={{ padding: '0.8rem 1rem', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{emp.name}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <button className="btn-primary" style={{ width: '100%', marginTop: '1rem' }} onClick={async () => {
+                      if (!isOnline) { showToast("Connexion internet requise", "danger"); return; }
+                      let updatedBriefings = [...(projetFormData.briefings || [])];
+                      if (selectedBriefingIndex !== null) {
+                        updatedBriefings[selectedBriefingIndex] = briefingFormData;
+                      } else {
+                        updatedBriefings.unshift(briefingFormData);
+                      }
+
+                      const updatedProj = {
+                        ...projetFormData,
+                        intervenants: projetIntervenants,
+                        dateCreation: projets[selectedProjetIndex]?.dateCreation || new Date().toLocaleDateString('fr-FR'),
+                        briefings: updatedBriefings
+                      };
+                      try {
+                        showToast("Enregistrement...", "info");
+                        const res = await apiCall('POST', '/projets', updatedProj);
+                        if (res.status === 200) {
+                          const newList = [...projets];
+                          newList[selectedProjetIndex] = updatedProj;
+                          setProjets(newList);
+                          safeStorage.setItem('gp_projets_v1', JSON.stringify(newList));
+                          setProjetFormData(updatedProj);
+                          showToast("Briefing enregistré !");
+                          addNotification("Safety Briefing", `Un nouveau briefing a été enregistré pour le chantier "${projetFormData.nomChantier}"`, "info");
+                          setProjetView('detailProjet');
+                        }
+                      } catch (e) { showToast(e.message, "danger"); }
+                    }}>💾 Enregistrer le Briefing</button>
+                  </div>
+                </div>
+
+                {/* Preview Side */}
+                <div style={{ position: 'relative' }}>
+                  <div style={{ position: 'absolute', top: '-50px', right: 0 }}>
+                    <button className="btn-primary" onClick={async () => {
+                      try {
+                        showToast("Génération du document A4...", "info");
+                        const page1 = document.getElementById('sb-page-1');
+                        const page2 = document.getElementById('sb-page-2');
+
+                        const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true, logging: false });
+                        const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true, logging: false });
+
+                        const pdf = new jsPDF('p', 'mm', 'a4');
+                        const pdfWidth = pdf.internal.pageSize.getWidth();
+                        const pdfHeight = pdf.internal.pageSize.getHeight();
+
+                        const img1 = canvas1.toDataURL('image/png');
+                        const img2 = canvas2.toDataURL('image/png');
+
+                        pdf.addImage(img1, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                        pdf.addPage();
+                        pdf.addImage(img2, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+                        pdf.save(`Safety_Briefing_${projetFormData.nomChantier}_${briefingFormData.date}.pdf`);
+                        showToast(`Document PDF (2 pages) généré !`);
+                      } catch (err) { showToast("Erreur PDF: " + err.message, "danger"); }
+                    }}>🖨️ Imprimer / PDF A4</button>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
+                    {/* PAGE 1 */}
+                    <div id="sb-page-1" style={{
+                      background: 'white',
+                      color: 'black',
+                      padding: '15mm',
+                      height: '297mm',
+                      width: '210mm',
+                      margin: '0 auto',
+                      fontFamily: '"Segoe UI", Arial, sans-serif',
+                      boxSizing: 'border-box',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', borderBottom: '2px solid #002060', paddingBottom: '10px' }}>
+                        <img src={logo} alt="Logo" style={{ height: '50px' }} />
+                        <h1 style={{ margin: 0, color: '#002060', fontSize: '24px', fontWeight: '800' }}>Safety Briefing Chantier</h1>
+                      </div>
+
+                      {/* Main Info Table */}
+                      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '30px' }}>
+                        <thead>
+                          <tr style={{ background: '#002060', color: 'white' }}>
+                            <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>PM Responsable Site</th>
+                            <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Date</th>
+                            <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Briefing</th>
+                            <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Chantier</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td style={{ border: '1px solid #333', padding: '12px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px' }}>{briefingFormData.responsable}</td>
+                            <td style={{ border: '1px solid #333', padding: '12px', textAlign: 'center', fontSize: '12px' }}>{new Date(briefingFormData.date).toLocaleDateString('fr-FR')}</td>
+                            <td style={{ border: '1px solid #333', padding: '12px', textAlign: 'center', fontSize: '12px' }}>{briefingFormData.topic}</td>
+                            <td style={{ border: '1px solid #333', padding: '12px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px' }}>{projetFormData.nomChantier}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      {/* Participants Table */}
+                      <div style={{ marginBottom: '10px', fontWeight: '900', fontSize: '13px', color: '#002060', textTransform: 'uppercase' }}>LISTE DES PARTICIPANTS</div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', flex: 1 }}>
+                        <thead>
+                          <tr style={{ background: '#002060', color: 'white' }}>
+                            <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Fonction</th>
+                            <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Nom</th>
+                            <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Signature</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {briefingFormData.intervenants.slice(0, 18).map((intv, idx) => (
+                            <tr key={idx}>
+                              <td style={{ border: '1px solid #333', padding: '8px', fontSize: '11px' }}>{intv.role}</td>
+                              <td style={{ border: '1px solid #333', padding: '8px', fontSize: '11px', fontWeight: 'bold' }}>{intv.name}</td>
+                              <td style={{ border: '1px solid #333', padding: '8px' }}></td>
+                            </tr>
+                          ))}
+                          {[...Array(Math.max(0, 18 - briefingFormData.intervenants.length))].map((_, i) => (
+                            <tr key={`empty-${i}`}>
+                              <td style={{ border: '1px solid #333', padding: '15px' }}></td>
+                              <td style={{ border: '1px solid #333', padding: '15px' }}></td>
+                              <td style={{ border: '1px solid #333', padding: '15px' }}></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div style={{ marginTop: '10px', fontSize: '9px', color: '#999', textAlign: 'center' }}>Page 1 / 2</div>
+                    </div>
+
+                    {/* PAGE 2 */}
+                    <div id="sb-page-2" style={{
+                      background: 'white',
+                      color: 'black',
+                      padding: '15mm',
+                      height: '297mm',
+                      width: '210mm',
+                      margin: '0 auto',
+                      fontFamily: '"Segoe UI", Arial, sans-serif',
+                      boxSizing: 'border-box'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', borderBottom: '2px solid #002060', paddingBottom: '10px' }}>
+                        <img src={logo} alt="Logo" style={{ height: '50px' }} />
+                        <h1 style={{ margin: 0, color: '#002060', fontSize: '24px', fontWeight: '800' }}>Safety Briefing Chantier</h1>
+                      </div>
+
+                      {/* Description Section */}
+                      <div style={{ marginBottom: '25px' }}>
+                        <div style={{ background: '#002060', color: 'white', padding: '10px', fontSize: '11px', fontWeight: 'bold', textAlign: 'center', border: '1px solid #002060', textTransform: 'uppercase' }}>
+                          Description des points et consignes évoquées
+                        </div>
+                        <div style={{ border: '1px solid #333', borderTop: 'none', padding: '20px', minHeight: '150px', fontSize: '12px', lineHeight: '1.6', color: '#333', whiteSpace: 'pre-wrap' }}>
+                          {briefingFormData.description || "BONJOUR A TOUS"}
+                        </div>
+                      </div>
+
+                      {/* Comments Section */}
+                      <div style={{ marginBottom: '25px' }}>
+                        <div style={{ background: '#002060', color: 'white', padding: '10px', fontSize: '11px', fontWeight: 'bold', textAlign: 'center', border: '1px solid #002060', textTransform: 'uppercase' }}>
+                          Commentaires et points de vigilance
+                        </div>
+                        <div style={{ border: '1px solid #333', borderTop: 'none', padding: '20px', minHeight: '120px', fontSize: '12px', lineHeight: '1.6', color: '#333', whiteSpace: 'pre-wrap' }}>
+                          {briefingFormData.commentaires || "Aucun commentaire spécifique."}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1687,7 +2001,7 @@ function App() {
               </div>
             )}
           </div>
-        ) : (
+        ) : selectedHub === 'hse' ? (
           <div className="animate-fade-in">
             {/* Critical Alerts Section */}
             {employees.some(e => e.certifications.some(c => {
@@ -1707,37 +2021,56 @@ function App() {
 
             {employeeView === 'list' ? (
               <>
-                <div className="responsive-grid" style={{ marginBottom: '2rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
                   <StatCard label="Effectif Total" value={employees.length} color="primary" />
                   <StatCard label="Taux de Conformité" value={`${Math.round(employees.reduce((acc, e) => acc + e.compliance, 0) / (employees.length || 1))}%`} color="accent" />
                   <StatCard label="Alertes Critiques" value={employees.filter(e => e.compliance < 60).length} color="danger" />
                 </div>
 
                 {/* Advanced Certification Analytics */}
-                <div className="glass-panel" style={{ padding: '2rem', marginBottom: '3rem' }}>
-                  <h3 style={{ fontSize: '1.1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>📊 Analyse par Certification</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '2rem' }}>
+                <div className="glass-panel" style={{ padding: '2rem', marginBottom: '3rem', position: 'relative', border: '1px solid var(--border-glass)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <span style={{ padding: '8px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: '10px' }}>📊</span>
+                      Distribution des Habilitations
+                    </h3>
+                    <div className="badge badge-info" style={{ fontSize: '0.6rem', letterSpacing: '1px' }}>Temps Réel</div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
                     {CERTIFICATION_LIST.map(cert => {
                       const count = employees.filter(e => e.certifications?.some(c => c.name === cert && !isExpired(c.dateExpiration) && c.attachment)).length;
                       const percentage = employees.length > 0 ? Math.round((count / employees.length) * 100) : 0;
                       return (
-                        <div key={cert}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                            <span>{cert}</span>
-                            <span style={{ color: count > 0 ? 'var(--accent)' : 'var(--text-dim)' }}>{count} pers. ({percentage}%)</span>
+                        <div key={cert} className="glass-card" style={{ background: 'rgba(255,255,255,0.02)', padding: '1.25rem', border: '1px solid rgba(255,255,255,0.03)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', alignItems: 'flex-start' }}>
+                            <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-secondary)', maxWidth: '140px', lineHeight: 1.2 }}>{cert}</span>
+                            <span style={{ fontSize: '1.1rem', fontWeight: '900', color: count > 0 ? 'var(--accent)' : 'var(--text-muted)' }}>{count}</span>
                           </div>
-                          <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${percentage}%`, background: percentage >= 50 ? 'var(--accent)' : (percentage >= 20 ? 'var(--warning)' : 'var(--primary)'), transition: 'width 1s ease' }}></div>
+                          <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', overflow: 'hidden', position: 'relative' }}>
+                            <div
+                              style={{
+                                height: '100%',
+                                width: `${percentage}%`,
+                                background: percentage > 80 ? 'var(--accent)' : percentage > 40 ? 'var(--primary)' : 'var(--text-muted)',
+                                borderRadius: '10px',
+                                transition: 'width 1.5s ease-in-out'
+                              }}
+                            ></div>
                           </div>
+                          <div style={{ textAlign: 'right', marginTop: '0.5rem', fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: '800' }}>{percentage}% COUVERTURE</div>
                         </div>
                       );
                     })}
                   </div>
                 </div>
 
-                <div className="glass-panel" style={{ padding: '2rem' }}>
-                  <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', flexWrap: 'wrap', gap: '1.5rem' }}>
-                    <h2>Liste des personnels</h2>
+                <div className="glass-panel" style={{ padding: '2rem', border: '1px solid var(--border-glass)' }}>
+                  <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1.5rem' }}>
+                    <div>
+                      <h2 style={{ fontSize: '1.5rem', fontWeight: '900' }}>Répertoire du Personnel</h2>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Gestion des dossiers et conformité individuelle</p>
+                    </div>
                     <div className="controls-group" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                       <button className="btn-secondary" onClick={exportCSV}>📥 CSV</button>
                       <select className="glass-input" style={{ width: '160px' }} value={filterDept} onChange={e => setFilterDept(e.target.value)}>
@@ -1759,18 +2092,18 @@ function App() {
                 </div>
               </>
             ) : employeeView === 'settings' ? (
-              <div className="glass-panel animate-slide-up" style={{ maxWidth: '700px', margin: '0 auto', padding: '3rem' }}>
+              <div className="glass-panel animate-fade-in" style={{ maxWidth: '800px', margin: '0 auto', padding: '3rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '3rem' }}>
                   <button className="btn-icon" onClick={() => setEmployeeView('list')}>←</button>
-                  <h2>Paramètres d'Accès</h2>
+                  <h2 style={{ margin: 0 }}>Contrôle des Accès</h2>
                 </div>
 
-                <div style={{ background: 'var(--card-bg-light)', padding: '2rem', borderRadius: '16px', marginBottom: '3rem' }}>
-                  <h3 style={{ marginBottom: '1.5rem' }}>Créer un nouvel accès</h3>
-                  <form onSubmit={handleAccountCreate} className="form-grid" style={{ gap: '1.5rem' }}>
+                <div className="glass-card" style={{ padding: '2.5rem', marginBottom: '3rem', borderLeft: '4px solid var(--primary)' }}>
+                  <h3 style={{ marginBottom: '1.5rem', fontSize: '1.2rem' }}>Nouvel Utilisateur</h3>
+                  <form onSubmit={handleAccountCreate} className="form-grid" style={{ gap: '1.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
                     <div style={{ gridColumn: 'span 2' }}>
                       <label className="input-label">Email de connexion</label>
-                      <input type="email" className="glass-input" value={newAccountFormData.email} onChange={e => setNewAccountFormData({ ...newAccountFormData, email: e.target.value })} required placeholder="nom@entreprise.com" />
+                      <input type="email" className="glass-input" value={newAccountFormData.email} onChange={e => setNewAccountFormData({ ...newAccountFormData, email: e.target.value })} required placeholder="nom@madagreen-power.com" />
                     </div>
                     <div>
                       <label className="input-label">Mot de passe</label>
@@ -1779,172 +2112,137 @@ function App() {
                     <div>
                       <label className="input-label">Niveau d'accès</label>
                       <select className="glass-input" value={newAccountFormData.role} onChange={e => setNewAccountFormData({ ...newAccountFormData, role: e.target.value })}>
-                        <option value="Super Admin">Super Administrateur (Accès Total)</option>
-                        <option value="Admin">Administrateur (Lecture & Écriture)</option>
-                        <option value="Visiteur">Visiteur (Lecture seule)</option>
+                        <option value="Super Admin">Super Administrateur</option>
+                        <option value="Admin">Administrateur</option>
+                        <option value="Visiteur">Visiteur (Lecture)</option>
                       </select>
                     </div>
                     <div style={{ gridColumn: 'span 2', marginTop: '1rem' }}>
-                      <button type="submit" className="btn-primary" style={{ width: '100%', justifyContent: 'center' }}>Ajouter l'utilisateur</button>
+                      <button type="submit" className="btn-primary" style={{ width: '100%', height: '50px' }}>Enregistrer l'accès</button>
                     </div>
                   </form>
                 </div>
 
-                <h3>Comptes Existants</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
+                <h3 style={{ marginBottom: '1.5rem', fontSize: '1.2rem' }}>Comptes Actifs</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {accounts.map((acc, idx) => (
-                    <div key={idx} className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem' }}>
-                      <div>
-                        <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{acc.email}</div>
-                        <div style={{ fontSize: '0.85rem', color: acc.role === 'Admin' ? 'var(--accent)' : 'var(--text-dim)' }}>Accès {acc.role}</div>
+                    <div key={idx} className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 2rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>👤</div>
+                        <div>
+                          <div style={{ fontWeight: '800', color: 'var(--text-primary)' }}>{acc.email}</div>
+                          <div className={`badge ${acc.role === 'Super Admin' ? 'badge-danger' : (acc.role === 'Admin' ? 'badge-info' : 'badge-success')}`} style={{ marginTop: '0.25rem', display: 'inline-block' }}>{acc.role}</div>
+                        </div>
                       </div>
                       {acc.email !== currentUser.email && (
-                        <button className="btn-icon" onClick={() => handleAccountDelete(acc.email)} style={{ color: 'var(--danger)' }}>🗑</button>
+                        <button className="btn-icon" onClick={() => handleAccountDelete(acc.email)} style={{ color: 'var(--danger)' }} title="Supprimer l'accès">🗑</button>
                       )}
                     </div>
                   ))}
                 </div>
               </div>
             ) : (employeeView === 'add' || employeeView === 'edit') ? (
-              <div className="glass-panel animate-slide-up" style={{ maxWidth: '900px', margin: '0 auto', padding: '3rem' }}>
+              <div className="glass-panel animate-fade-in" style={{ maxWidth: '1000px', margin: '0 auto', padding: '3rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '3rem' }}>
                   <button className="btn-icon" onClick={() => setEmployeeView('list')}>←</button>
-                  <h2>{employeeView === 'add' ? "Creation employé" : "Mise à jour Dossier"}</h2>
+                  <h2 style={{ margin: 0 }}>{employeeView === 'add' ? "Nouveau Dossier Personnel" : "Mise à jour du Dossier"}</h2>
                 </div>
 
-                <form onSubmit={saveEmployee} className="form-grid">
-                  <div className="avatar-upload-area">
-                    <div className="avatar" style={{ width: '180px', height: '180px', cursor: 'pointer' }} onClick={() => document.getElementById('file-up').click()}>
-                      <img src={formData.avatar || avatarPlaceholder} alt="Avatar" />
-                      <div style={{ position: 'absolute', bottom: '15px', right: '15px', background: 'var(--primary)', padding: '8px', borderRadius: '50%', boxShadow: '0 5px 15px var(--primary-glow)' }}>📷</div>
-                    </div>
-                    <input type="file" id="file-up" hidden onChange={handleFileChange} />
-                    <p style={{ fontSize: '0.8rem', textAlign: 'center' }}>Cliquez pour uploader<br />JPG, PNG (Max 2MB)</p>
-                  </div>
-
-                  <div>
-                    <label className="input-label">Nom de famille</label>
-                    <input type="text" name="lastName" className="glass-input" value={formData.lastName} onChange={handleFormChange} required placeholder="DUBOIS" />
-                  </div>
-                  <div>
-                    <label className="input-label">Prénom</label>
-                    <input type="text" name="firstName" className="glass-input" value={formData.firstName} onChange={handleFormChange} required placeholder="Jean" />
-                  </div>
-                  <div>
-                    <label className="input-label">Département</label>
-                    <input type="text" name="departement" className="glass-input" value={formData.departement} onChange={handleFormChange} required placeholder="Exploitation" />
-                  </div>
-                  <div>
-                    <label className="input-label">Fonction</label>
-                    <input type="text" name="role" className="glass-input" value={formData.role} onChange={handleFormChange} required placeholder="Conducteur d'engins" />
-                  </div>
-                  <div>
-                    <label className="input-label">Matricule (Optionnel)</label>
-                    <input type="text" name="matricule" className="glass-input" value={formData.matricule} onChange={handleFormChange} placeholder="AUTO-GEN" disabled={employeeView === 'edit'} />
-                  </div>
-
-                  <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: '1.5rem', background: 'var(--card-bg-light)', padding: '1.5rem', borderRadius: '12px', borderLeft: formData.aptitudeMedicale ? '4px solid var(--accent)' : '4px solid var(--danger)' }}>
-                    <input
-                      type="checkbox"
-                      id="aptitudeMedicale"
-                      checked={formData.aptitudeMedicale}
-                      onChange={e => setFormData({ ...formData, aptitudeMedicale: e.target.checked })}
-                      style={{ width: '28px', height: '28px', cursor: 'pointer' }}
-                    />
+                <form onSubmit={saveEmployee}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: '3rem' }}>
+                    {/* Sidebar: Photo & Status */}
                     <div>
-                      <label htmlFor="aptitudeMedicale" style={{ fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer' }}>Aptitude Médicale</label>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', marginTop: '0.2rem' }}>
-                        {formData.aptitudeMedicale ? '🟢 Le collaborateur a été déclaré APTE' : '🔴 Le collaborateur a été déclaré INAPTE'}
+                      <div
+                        className="glass-card"
+                        style={{ padding: '1rem', textAlign: 'center', cursor: 'pointer', border: '2px dashed var(--border-glass)' }}
+                        onClick={() => document.getElementById('file-up').click()}
+                      >
+                        <div style={{ width: '100%', aspectRatio: '1/1', borderRadius: '12px', overflow: 'hidden', background: 'var(--bg-main)', marginBottom: '1rem' }}>
+                          <img src={formData.avatar || avatarPlaceholder} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Avatar" />
+                        </div>
+                        <div className="btn-secondary" style={{ width: '100%', padding: '0.5rem', fontSize: '0.8rem' }}>Changer la photo</div>
+                        <input type="file" id="file-up" hidden onChange={handleFileChange} />
+                      </div>
+
+                      <div className="glass-card" style={{ marginTop: '1.5rem', padding: '1.5rem', borderLeft: `4px solid ${formData.aptitudeMedicale ? 'var(--accent)' : 'var(--danger)'}` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                          <input
+                            type="checkbox"
+                            id="apt-med"
+                            checked={formData.aptitudeMedicale}
+                            onChange={e => setFormData({ ...formData, aptitudeMedicale: e.target.checked })}
+                            style={{ width: '20px', height: '20px' }}
+                          />
+                          <label htmlFor="apt-med" style={{ fontWeight: '800', fontSize: '0.9rem' }}>Aptitude Médicale</label>
+                        </div>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          {formData.aptitudeMedicale ? 'Certificat médical valide fourni.' : 'Aptitude non confirmée.'}
+                        </p>
                       </div>
                     </div>
-                  </div>
 
-                  <div style={{ gridColumn: 'span 2', marginTop: '2rem' }}>
-                    <h3 style={{ marginBottom: '1.5rem', fontSize: '1.1rem', color: 'var(--primary)' }}>EPI (Équipement de Protection Individuelle)</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-                      {[
-                        { key: 'gants', label: 'Gants' },
-                        { key: 'chaussures', label: 'Chaussures de sécurité' },
-                        { key: 'casques', label: 'Casques' },
-                        { key: 'uniforme', label: 'Uniforme manche longue' },
-                        { key: 'gillet', label: 'Gillet Cotton' }
-                      ].map(({ key, label }) => (
-                        <div key={key} style={{ background: 'var(--card-bg-light)', padding: '1rem', borderRadius: '12px', borderLeft: formData.epis[key].checked ? '4px solid var(--accent)' : '4px solid var(--border)' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: formData.epis[key].checked ? '0.75rem' : '0' }}>
-                            <input
-                              type="checkbox"
-                              checked={formData.epis[key].checked}
-                              onChange={e => setFormData(pr => ({ ...pr, epis: { ...pr.epis, [key]: { ...pr.epis[key], checked: e.target.checked } } }))}
-                              style={{ width: '20px', height: '20px', cursor: 'pointer' }}
-                            />
-                            <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{label}</span>
-                          </div>
-                          {formData.epis[key].checked && (
-                            <div className="animate-fade-in">
-                              <label className="input-label" style={{ fontSize: '0.75rem' }}>Date de dotation</label>
-                              <input
-                                type="date"
-                                className="glass-input"
-                                value={formData.epis[key].date}
-                                onChange={e => setFormData(pr => ({ ...pr, epis: { ...pr.epis, [key]: { ...pr.epis[key], date: e.target.value } } }))}
-                                style={{ padding: '0.5rem', fontSize: '0.85rem' }}
-                              />
+                    {/* Main Content: Info & Certs */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                      <div className="glass-card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                        <div style={{ gridColumn: 'span 2' }}><h3 style={{ fontSize: '1rem', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '1px' }}>Informations Générales</h3></div>
+                        <div><label className="input-label">Nom</label><input type="text" name="lastName" className="glass-input" value={formData.lastName} onChange={handleFormChange} required /></div>
+                        <div><label className="input-label">Prénom</label><input type="text" name="firstName" className="glass-input" value={formData.firstName} onChange={handleFormChange} required /></div>
+                        <div><label className="input-label">Département</label><input type="text" name="departement" className="glass-input" value={formData.departement} onChange={handleFormChange} required /></div>
+                        <div><label className="input-label">Fonction</label><input type="text" name="role" className="glass-input" value={formData.role} onChange={handleFormChange} required /></div>
+                        <div><label className="input-label">Matricule</label><input type="text" name="matricule" className="glass-input" value={formData.matricule} onChange={handleFormChange} placeholder="AUTO-GENÉRÉ" disabled={employeeView === 'edit'} /></div>
+                      </div>
+
+                      <div className="glass-card">
+                        <h3 style={{ fontSize: '1rem', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1.5rem' }}>Équipements (EPI)</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+                          {['gants', 'chaussures', 'casques', 'uniforme', 'gillet'].map(key => (
+                            <div key={key} style={{ padding: '1rem', background: 'var(--bg-main)', borderRadius: '12px', border: formData.epis[key].checked ? '1px solid var(--accent-glow)' : '1px solid transparent' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={formData.epis[key].checked}
+                                  onChange={e => setFormData(pr => ({ ...pr, epis: { ...pr.epis, [key]: { ...pr.epis[key], checked: e.target.checked } } }))}
+                                />
+                                <span style={{ fontSize: '0.8rem', fontWeight: '700' }}>{key.charAt(0).toUpperCase() + key.slice(1)}</span>
+                              </div>
+                              {formData.epis[key].checked && (
+                                <input
+                                  type="date"
+                                  className="glass-input"
+                                  style={{ padding: '0.3rem', fontSize: '0.75rem' }}
+                                  value={formData.epis[key].date}
+                                  onChange={e => setFormData(pr => ({ ...pr, epis: { ...pr.epis, [key]: { ...pr.epis[key], date: e.target.value } } }))}
+                                />
+                              )}
                             </div>
-                          )}
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      </div>
 
-                    <h3 style={{ marginBottom: '1.5rem', fontSize: '1.1rem', color: 'var(--primary)' }}>Habilitations HSE</h3>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.5rem' }}>
-                      {formData.certifications.map((c, i) => (
-                        <div key={i} className="glass-card" style={{ padding: '0.75rem 1rem', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '1rem', border: '1px solid var(--primary-glow)' }}>
-                          <div>
-                            <div style={{ fontWeight: '700', fontSize: '0.9rem' }}>{c.name}</div>
-                            <div style={{ fontSize: '0.7rem', color: isExpired(c.dateExpiration) ? 'var(--danger)' : 'var(--accent)' }}>Exp: {c.dateExpiration}</div>
-                          </div>
-                          <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            {c.attachment && (
-                              <button type="button" onClick={() => viewAttachment(c.attachment)} style={{ background: 'var(--primary-glow)', border: 'none', color: 'var(--primary)', cursor: 'pointer', borderRadius: '4px', padding: '2px 6px', fontSize: '0.8rem' }}>📎 Voir</button>
-                            )}
-                            <button type="button" onClick={() => setFormData(f => ({ ...f, certifications: f.certifications.filter((_, idx) => idx !== i) }))} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}>✕</button>
-                          </div>
+                      <div className="glass-card">
+                        <h3 style={{ fontSize: '1rem', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1.5rem' }}>Certifications HSE</h3>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                          {formData.certifications.map((c, i) => (
+                            <div key={i} className="badge badge-info" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}>
+                              <span>{c.name} ({c.dateExpiration})</span>
+                              <button type="button" onClick={() => setFormData(f => ({ ...f, certifications: f.certifications.filter((_, idx) => idx !== i) }))} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
 
-                    <div className="badge-stats-grid">
-                      <div>
-                        <label className="input-label">Type de formation</label>
-                        <select className="glass-input" value={draftCert.name} onChange={e => setDraftCert(d => ({ ...d, name: e.target.value }))}>
-                          <option value="">Sélectionner...</option>
-                          {CERTIFICATION_LIST.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="input-label">Date</label>
-                        <input type="date" className="glass-input" value={draftCert.dateObtention} onChange={e => setDraftCert(d => ({ ...d, dateObtention: e.target.value }))} />
-                      </div>
-                      <div>
-                        <label className="input-label">Validité (ans)</label>
-                        <input type="number" className="glass-input" value={draftCert.validite} onChange={e => setDraftCert(d => ({ ...d, validite: e.target.value }))} />
-                      </div>
-                      <div>
-                        <label className="input-label">Pièce Jointe</label>
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                          <button type="button" className="btn-secondary" style={{ fontSize: '0.8rem', padding: '0.5rem', flex: 1 }} onClick={() => document.getElementById('cert-file').click()}>
-                            {draftCert.attachment ? '✅ PDF Joint' : '📎 Joindre PDF'}
-                          </button>
-                          <input type="file" id="cert-file" hidden accept="application/pdf" onChange={handleCertFileChange} />
+                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '1rem', alignItems: 'end', background: 'var(--bg-main)', padding: '1.5rem', borderRadius: '12px' }}>
+                          <div><label className="input-label">Type</label><select className="glass-input" value={draftCert.name} onChange={e => setDraftCert(d => ({ ...d, name: e.target.value }))}><option value="">Sélectionner...</option>{CERTIFICATION_LIST.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                          <div><label className="input-label">Date</label><input type="date" className="glass-input" value={draftCert.dateObtention} onChange={e => setDraftCert(d => ({ ...d, dateObtention: e.target.value }))} /></div>
+                          <div><label className="input-label">Validité</label><input type="number" className="glass-input" value={draftCert.validite} onChange={e => setDraftCert(d => ({ ...d, validite: e.target.value }))} placeholder="Ans" /></div>
+                          <button type="button" className="btn-primary" onClick={addCert} style={{ height: '46px' }}>Ajouter</button>
                         </div>
                       </div>
-                      <button type="button" className="btn-primary" onClick={addCert} style={{ height: '46px', width: '100%' }}>Ajouter</button>
                     </div>
                   </div>
 
-                  <div className="form-actions">
-                    <button type="submit" className="btn-primary" style={{ flex: 1, justifyContent: 'center' }}>{employeeView === 'edit' ? "Mettre à jour" : "Enregistrer le dossier"}</button>
-                    <button type="button" className="btn-secondary" style={{ flex: 1 }} onClick={() => setEmployeeView('list')}>Annuler</button>
+                  <div style={{ marginTop: '3rem', display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                    <button type="button" className="btn-secondary" onClick={() => setEmployeeView('list')}>Annuler</button>
+                    <button type="submit" className="btn-primary" style={{ minWidth: '200px' }}>{employeeView === 'edit' ? "Mettre à jour le dossier" : "Créer le profil"}</button>
                   </div>
                 </form>
               </div>
@@ -2059,88 +2357,88 @@ function App() {
                   <div style={{ position: 'fixed', left: '-100vw', top: 0, opacity: 0, pointerEvents: 'none' }}>
                     <div id="pdf-badge-wrapper" style={{ padding: '40px', background: 'white', display: 'flex', flexDirection: 'column', gap: '40px' }}>
 
-                      {/* Recto 85x105mm */}
-                      <div id="badge-recto" style={{ width: '85mm', height: '105mm', borderRadius: '12px', border: '1px solid #ddd', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#f8fafc', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', position: 'relative', boxSizing: 'border-box' }}>
+                      {/* Recto CR80: 54x86mm */}
+                      <div id="badge-recto" style={{ width: '54mm', height: '86mm', borderRadius: '4mm', border: '0.5px solid #e2e8f0', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#ffffff', position: 'relative', boxSizing: 'border-box', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
 
-                        {/* Watermark Logo */}
-                        <img src={logo} alt="" style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', width: '80%', opacity: '0.06', pointerEvents: 'none', zIndex: '0' }} />
-
-                        {/* Header */}
-                        <div style={{ background: '#1c4c8d', color: 'white', textAlign: 'center', padding: '15px 10px', position: 'relative', zIndex: '1' }}>
-                          <div style={{ fontSize: '12px', fontWeight: '800', letterSpacing: '0.8px', lineHeight: '1.2' }}>PASSEPORT SÉCURITÉ<br />MADAGREEN POWER</div>
+                        {/* Professional Header */}
+                        <div style={{ background: '#1e40af', height: '18mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'white', position: 'relative', zIndex: 10 }}>
+                          <img src={logo} alt="" style={{ height: '7mm', marginBottom: '1mm', filter: 'brightness(0) invert(1)' }} />
+                          <div style={{ fontSize: '7pt', fontWeight: '800', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Passeport Sécurité</div>
                         </div>
 
-                        {/* Body */}
-                        <div style={{ flex: 1, padding: '20px 15px', display: 'flex', flexDirection: 'column', gap: '20px', alignItems: 'center', position: 'relative', zIndex: '1', textAlign: 'center' }}>
-                          <div style={{ flexShrink: 0 }}>
-                            <img src={selectedEmployee.avatar || avatarPlaceholder} alt="" style={{ width: '120px', height: '135px', objectFit: 'cover', borderRadius: '8px', border: '3px solid white', boxShadow: '0 4px 10px rgba(0,0,0,0.15)' }} />
-                          </div>
-
-                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                              <span style={{ color: '#1c4c8d', fontWeight: '700', fontSize: '10px', textTransform: 'uppercase' }}>Nom Complet</span>
-                              <span style={{ fontWeight: '800', fontSize: '18px', color: '#0f172a', lineHeight: '1.2' }}>{selectedEmployee.firstName}<br />{selectedEmployee.lastName?.toUpperCase()}</span>
-                            </div>
-
-                            <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '10px', marginTop: '10px', display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'baseline', gap: '5px' }}>
-                                <span style={{ color: '#1c4c8d', fontWeight: '700', fontSize: '10px', textTransform: 'uppercase' }}>Matricule:</span>
-                                <span style={{ fontWeight: '800', fontSize: '14px', color: '#334155', fontFamily: 'monospace' }}>{selectedEmployee.matricule}</span>
-                              </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                                <span style={{ color: '#1c4c8d', fontWeight: '700', fontSize: '10px', textTransform: 'uppercase' }}>FONCTION</span>
-                                <span style={{ fontWeight: '600', fontSize: '12px', color: '#64748b' }}>{selectedEmployee.role}</span>
-                              </div>
-                              <div style={{ background: selectedEmployee.aptitudeMedicale !== false ? '#dcfce7' : '#fee2e2', color: selectedEmployee.aptitudeMedicale !== false ? '#166534' : '#991b1b', padding: '6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '12px', textTransform: 'uppercase', marginTop: '5px' }}>
-                                Aptitude : {selectedEmployee.aptitudeMedicale !== false ? '✅ APTE' : '❌ INAPTE'}
-                              </div>
-                            </div>
-                            
-                            <div style={{ marginTop: 'auto', textAlign: 'center', paddingBottom: '8px' }}>
-                              <div style={{ fontSize: '8px', color: '#94a3b8', fontWeight: '800' }}>☎ URGENCE HSE: 034 34 001 97 / 038 48 911 41</div>
-                            </div>
+                        {/* Photo Section */}
+                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '4mm', position: 'relative', zIndex: 10 }}>
+                          <div style={{ width: '25mm', height: '30mm', borderRadius: '2mm', overflow: 'hidden', border: '2px solid #1e40af', background: '#f8fafc' }}>
+                            <img src={selectedEmployee.avatar || avatarPlaceholder} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           </div>
                         </div>
 
-                        {/* Status Bar (Bottom) */}
-                        <div style={{ background: selectedEmployee.compliance >= 90 ? '#16a34a' : (selectedEmployee.compliance >= 60 ? '#d97706' : '#dc2626'), height: '15px', width: '100%', position: 'relative', zIndex: '1' }}></div>
+                        {/* Info Section */}
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '3mm', gap: '2mm', zIndex: 10 }}>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '10pt', fontWeight: '900', color: '#0f172a', lineHeight: '1.1' }}>{selectedEmployee.firstName}</div>
+                            <div style={{ fontSize: '12pt', fontWeight: '900', color: '#0f172a', textTransform: 'uppercase', lineHeight: '1.1' }}>{selectedEmployee.lastName}</div>
+                          </div>
+
+                          <div style={{ background: '#f1f5f9', width: '100%', padding: '1.5mm', borderRadius: '1mm', textAlign: 'center' }}>
+                            <div style={{ fontSize: '6pt', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.5mm' }}>Fonction</div>
+                            <div style={{ fontSize: '8pt', color: '#1e40af', fontWeight: '800' }}>{selectedEmployee.role}</div>
+                          </div>
+
+                          <div style={{ background: '#f1f5f9', width: '100%', padding: '1.5rem', borderRadius: '1mm', textAlign: 'center' }}>
+                            <div style={{ fontSize: '6pt', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.5rem' }}>MATRICULE</div>
+                            <div style={{ fontSize: '10pt', fontWeight: '900', color: '#0f172a' }}>{selectedEmployee.matricule}</div>
+                          </div>
+                        </div>
+
+                        {/* Footer Bar */}
+                        <div style={{ background: selectedEmployee.compliance >= 90 ? '#10b981' : (selectedEmployee.compliance >= 60 ? '#f59e0b' : '#ef4444'), height: '1.5mm', width: '100%' }}></div>
                       </div>
 
-                      {/* Verso 85x105mm */}
-                      <div id="badge-verso" style={{ width: '85mm', height: '105mm', background: 'white', color: 'black', border: '1px solid #cbd5e1', borderRadius: '10px', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-                        {/* Filigrane Logo */}
-                        <img src={logo} alt="" style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(30deg)', width: '80%', opacity: '0.08', pointerEvents: 'none', zIndex: '0' }} />
+                      {/* Verso CR80: 54x86mm */}
+                      <div id="badge-verso" style={{ width: '54mm', height: '86mm', borderRadius: '4mm', border: '0.5px solid #e2e8f0', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#ffffff', position: 'relative', boxSizing: 'border-box', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
 
-                        <div style={{ height: '15mm', background: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: '14px', position: 'relative', zIndex: '1' }}>
-                          HABILITATIONS & APTITUDES
+                        {/* Watermark Logo */}
+                        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', opacity: 0.05, width: '40mm', zIndex: 0, pointerEvents: 'none' }}>
+                          <img src={logo} alt="" style={{ width: '100%' }} />
                         </div>
-                        <div style={{ flex: 1, padding: '5mm', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: '1' }}>
 
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: selectedEmployee.aptitudeMedicale !== false ? '#10b981' : '#f43f5e', color: 'white', padding: '5px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', marginBottom: '15px' }}>
-                            <span>Aptitude Médicale</span>
-                            <span>{selectedEmployee.aptitudeMedicale !== false ? 'APTE' : 'INAPTE'}</span>
+                        <div style={{ background: '#334155', color: 'white', padding: '2mm', textAlign: 'center', fontSize: '7pt', fontWeight: '800', textTransform: 'uppercase', position: 'relative', zIndex: 1 }}>
+                          Habilitations
+                        </div>
+
+                        <div style={{ flex: 1, padding: '3mm', display: 'flex', flexDirection: 'column', gap: '1.5mm', position: 'relative', zIndex: 1 }}>
+                          {/* Medical Aptitude Section Moved to Verso */}
+                          <div style={{ background: selectedEmployee.aptitudeMedicale !== false ? '#dcfce7' : '#fee2e2', padding: '2mm', borderRadius: '1.5mm', border: '1px solid ' + (selectedEmployee.aptitudeMedicale !== false ? '#86efac' : '#fca5a5'), textAlign: 'center', marginBottom: '1mm' }}>
+                            <div style={{ fontSize: '5.5pt', color: selectedEmployee.aptitudeMedicale !== false ? '#166534' : '#991b1b', fontWeight: '800', textTransform: 'uppercase', marginBottom: '0.5mm' }}>Aptitude Médicale</div>
+                            <div style={{ fontSize: '9pt', fontWeight: '900', color: selectedEmployee.aptitudeMedicale !== false ? '#15803d' : '#b91c1c' }}>{selectedEmployee.aptitudeMedicale !== false ? 'CONFORME' : 'NON CONFORME'}</div>
                           </div>
 
-                          <div style={{ fontSize: '10px', fontWeight: '900', color: '#1e293b', borderBottom: '2px solid #1e293b', paddingBottom: '5px', marginBottom: '10px' }}>LISTE DES CERTIFICATIONS</div>
-                          <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '6pt', fontWeight: '900', color: '#64748b', borderBottom: '1px solid #e2e8f0', paddingBottom: '1mm', marginBottom: '1mm' }}>HABILITATION / EXPIRATION</div>
+
+                          <div style={{ flex: 1, overflow: 'hidden' }}>
                             {selectedEmployee.certifications.length > 0 ? (
-                              selectedEmployee.certifications.map((c, i) => (
-                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', padding: '7px 0', fontSize: '10px' }}>
-                                  <div style={{ fontWeight: 'bold', color: '#334155', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                    {c.name}
-                                    {(new Date(c.dateExpiration) - new Date()) < (30 * 24 * 60 * 60 * 1000) && <span style={{ color: '#d97706', fontSize: '8px' }}>⚠️</span>}
-                                  </div>
-                                  <div style={{ color: isExpired(c.dateExpiration) ? '#f43f5e' : '#10b981', fontWeight: '900' }}>{c.dateExpiration}</div>
+                              selectedEmployee.certifications.slice(0, 6).map((c, i) => (
+                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.2mm 0', borderBottom: '0.5px solid #f1f5f9' }}>
+                                  <div style={{ fontSize: '6.5pt', fontWeight: '700', color: '#1e293b', width: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                                  <div style={{ fontSize: '6.5pt', fontWeight: '800', color: isExpired(c.dateExpiration) ? '#ef4444' : '#1e293b' }}>{c.dateExpiration.replace(/-/g, '/')}</div>
                                 </div>
                               ))
                             ) : (
-                              <div style={{ padding: '40px', textAlign: 'center', fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>Aucune certification enregistrée</div>
+                              <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '7pt', marginTop: '5mm', fontStyle: 'italic' }}>Aucune habilitation</div>
                             )}
                           </div>
-                          <div style={{ marginTop: 'auto', borderTop: '1px dashed #cbd5e1', paddingTop: '10px', textAlign: 'center' }}>
-                            <div style={{ fontSize: '12px', fontWeight: '900', color: '#1e293b' }}>MADAGREEN POWER</div>
-                            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '5px' }}>☎ Urgence HSE: 034 34 001 97 / 038 48 911 41 </div>
+
+                          <div style={{ background: 'rgba(248, 250, 252, 0.8)', padding: '2mm', borderRadius: '2mm', border: '1px dashed #cbd5e1', textAlign: 'center' }}>
+                            <div style={{ fontSize: '5.5pt', color: '#64748b', fontWeight: '800', marginBottom: '1mm' }}>URGENCE / HSE CONTACT</div>
+                            <div style={{ fontSize: '7pt', fontWeight: '900', color: '#0f172a' }}>034 34 001 97 — 038 48 911 41</div>
                           </div>
+                        </div>
+
+                        {/* MADAGREEN Branding */}
+                        <div style={{ background: 'rgba(241, 245, 249, 0.9)', padding: '2mm', textAlign: 'center', borderTop: '1px solid #e2e8f0', position: 'relative', zIndex: 1 }}>
+                          <div style={{ fontSize: '6pt', fontWeight: '900', color: '#475569' }}>MADAGREEN POWER</div>
+                          <div style={{ fontSize: '4pt', color: '#94a3b8' }}>www.madagreen-power.com</div>
                         </div>
                       </div>
 
@@ -2150,7 +2448,7 @@ function App() {
               </section>
             ) : null}
           </div>
-        )}
+        ) : null}
       </main>
 
       {/* Modern Confirmation Modal */}
@@ -2193,9 +2491,9 @@ function App() {
               <button className="btn-icon" onClick={() => setPdfViewerUrl(null)} style={{ fontSize: '1.5rem' }}>✕</button>
             </div>
             <div style={{ flex: 1, background: '#fff', borderRadius: '12px', overflow: 'hidden' }}>
-              <iframe 
-                src={pdfViewerUrl} 
-                style={{ width: '100%', height: '100%', border: 'none' }} 
+              <iframe
+                src={pdfViewerUrl}
+                style={{ width: '100%', height: '100%', border: 'none' }}
                 title="PDF Viewer"
               ></iframe>
             </div>

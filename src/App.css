@@ -41,7 +41,7 @@
   height: 100%;
   border-radius: 26px;
   object-fit: cover;
-  border: 4px solid var(--bg-deep);
+  border: 4px solid var(--bg-main);
 }
 
 .id-badge {
@@ -63,7 +63,7 @@
   border-radius: 20px;
   margin-top: 1.5rem;
   padding: 2px;
-  border: 1px solid var(--glass-border);
+  border: 1px solid var(--border-glass);
 }
 
 .meter-fill {
@@ -115,9 +115,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--glass-border);
-  background: var(--btn-icon-bg);
-  color: var(--text-dim);
+  border: 1px solid var(--border-glass);
+  background: var(--bg-card);
+  color: var(--text-secondary);
   transition: all 0.2s ease;
 }
 
@@ -130,18 +130,18 @@
 /* Form Styling */
 .glass-input {
   width: 100%;
-  background: var(--input-bg);
-  border: 1px solid var(--glass-border);
+  background: var(--bg-input);
+  border: 1px solid var(--border-glass);
   border-radius: 12px;
   padding: 0.8rem 1.25rem;
-  color: var(--text-main);
+  color: var(--text-primary);
   font-size: 0.95rem;
   transition: all 0.3s ease;
 }
 
 .glass-input:focus {
   outline: none;
-  background: var(--input-bg-focus);
+  background: rgba(255, 255, 255, 0.05);
   border-color: var(--primary);
   box-shadow: 0 0 0 4px var(--primary-glow);
 }
@@ -151,7 +151,7 @@
   font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--text-secondary);
   margin-bottom: 0.5rem;
   letter-spacing: 0.05em;
 }
