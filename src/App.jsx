@@ -94,21 +94,21 @@ function App() {
           try {
             const empKeys = [];
             for (let i = 0; i < localStorage.length; i++) {
-               if (localStorage.key(i) && localStorage.key(i).includes('employees')) empKeys.push(localStorage.key(i));
+              if (localStorage.key(i) && localStorage.key(i).includes('employees')) empKeys.push(localStorage.key(i));
             }
             empKeys.forEach(empKey => {
-               const empDataStr = localStorage.getItem(empKey);
-               if (empDataStr) {
-                 const data = JSON.parse(empDataStr);
-                 const lightData = data.map(emp => ({
-                   ...emp,
-                   avatar: null,
-                   certifications: emp.certifications?.map(c => ({ ...c, attachment: null }))
-                 }));
-                 localStorage.setItem(empKey, JSON.stringify(lightData));
-               }
+              const empDataStr = localStorage.getItem(empKey);
+              if (empDataStr) {
+                const data = JSON.parse(empDataStr);
+                const lightData = data.map(emp => ({
+                  ...emp,
+                  avatar: null,
+                  certifications: emp.certifications?.map(c => ({ ...c, attachment: null }))
+                }));
+                localStorage.setItem(empKey, JSON.stringify(lightData));
+              }
             });
-          } catch(err) {}
+          } catch (err) { }
 
           try {
             // 3. Retry saving the current item (strip if it happens to be employees)
@@ -242,10 +242,10 @@ function App() {
           ]);
 
           if (resAcc.status === 200 && resAcc.data.success) setAccounts(resAcc.data.accounts);
-          
+
           const safeParse = (val, def) => {
             if (typeof val === 'string') {
-              try { return JSON.parse(val); } catch(err) { return def; }
+              try { return JSON.parse(val); } catch (err) { return def; }
             }
             return val || def;
           };
@@ -627,6 +627,15 @@ function App() {
     if (file) {
       const reader = new FileReader()
       reader.onloadend = () => setFormData(prev => ({ ...prev, avatar: reader.result }))
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleSignatureChange = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => setFormData(prev => ({ ...prev, signature: reader.result }))
       reader.readAsDataURL(file)
     }
   }
@@ -1450,147 +1459,178 @@ function App() {
             )}
 
             {projetView === 'detailProjet' && selectedProjetIndex !== null && (
-              <div className="glass-panel animate-slide-up" style={{ maxWidth: '600px', margin: '0 auto', padding: '3rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
+              <div className="glass-panel animate-slide-up" style={{ width: '100%', minHeight: '85vh', padding: '3rem', boxSizing: 'border-box' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1.5rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                     <button className="btn-icon" onClick={() => setProjetView('projet')}>←</button>
-                    <h2>Détails du Projet</h2>
+                    <h2 style={{ margin: 0, fontSize: '1.8rem' }}>Détails du Projet</h2>
                   </div>
-                  <button className="btn-primary" style={{ background: 'var(--info)' }} onClick={() => {
-                    setBriefingFormData({ id: Date.now().toString(), topic: 'Briefing Sécurité Quotidien', date: new Date().toISOString().split('T')[0], responsable: projetFormData.responsableChantier, description: '', commentaires: '', intervenants: [...projetIntervenants] });
-                    setSelectedBriefingIndex(null);
-                    setProjetView('editBriefing');
-                  }}>
-                    + Nouveau Briefing
-                  </button>
+                  <div style={{ fontSize: '2.3rem', fontWeight: 'bold', color: 'var(--primary)' }}>
+                    {projetFormData.nomChantier}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  <div><label className="input-label">Nom du Chantier</label><p style={{ margin: '0.25rem 0 0', fontWeight: '600', fontSize: '1rem' }}>{projetFormData.nomChantier}</p></div>
-                  <div><label className="input-label">Responsable Chantier</label><p style={{ margin: '0.25rem 0 0', fontWeight: '700', fontSize: '1.1rem', color: 'var(--primary)' }}>{projetFormData.responsableChantier || "Non désigné"}</p></div>
-                  <div><label className="input-label">Lieu</label><p style={{ margin: '0.25rem 0 0', fontWeight: '600', fontSize: '1rem' }}>{projetFormData.lieu}</p></div>
-                  <div><label className="input-label">Date de début</label><p style={{ margin: '0.25rem 0 0', fontWeight: '600', fontSize: '1rem' }}>{projetFormData.dateDebut}</p></div>
-                  <div>
-                    <label className="input-label">Caisse d'outillage</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--card-bg-light)', padding: '1rem', borderRadius: '10px', marginTop: '0.5rem' }}>
-                      <div style={{ fontSize: '1.5rem' }}>📦</div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '4rem' }}>
+
+                  {/* LEFT COLUMN: Infos, Caisse, EPC */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+
+                    <div className="glass-card" style={{ padding: '1.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <label className="input-label">Responsable Chantier</label>
+                        <div style={{ fontWeight: '700', fontSize: '1.3rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span>👤</span> {projetFormData.responsableChantier || "Non désigné"}
+                        </div>
+                      </div>
                       <div>
-                        {projetFormData.outillageCaisse ? (
-                          <div
-                            style={{ cursor: 'pointer' }}
-                            onClick={() => {
-                              const caisse = caisses.find(c => c.numeroCaisse === projetFormData.outillageCaisse);
-                              if (caisse) {
-                                setPreviousView('detailProjet');
-                                setCaisseFormData(caisse);
-                                setProjetView('detailCaisse');
-                              } else {
-                                showToast("Caisse introuvable", "danger");
-                              }
-                            }}
-                          >
-                            <div style={{ fontWeight: '700', fontSize: '1rem', color: 'var(--primary)', textDecoration: 'underline' }}>Caisse: {projetFormData.outillageCaisse}</div>
-                            <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>
-                              Affecté à: {caisses.find(c => c.numeroCaisse === projetFormData.outillageCaisse)?.affecterA || "Personnel non identifié"}
+                        <label className="input-label">Lieu</label>
+                        <div style={{ fontWeight: '600', fontSize: '1.1rem' }}>📍 {projetFormData.lieu}</div>
+                      </div>
+                      <div>
+                        <label className="input-label">Date de début</label>
+                        <div style={{ fontWeight: '600', fontSize: '1.1rem' }}>📅 {projetFormData.dateDebut}</div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="input-label" style={{ fontSize: '1.1rem' }}>Caisse d'outillage</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', background: 'var(--card-bg-light)', padding: '1.5rem', borderRadius: '12px', marginTop: '0.5rem', border: '1px solid var(--border-glass)' }}>
+                        <div style={{ fontSize: '2.5rem' }}>📦</div>
+                        <div>
+                          {projetFormData.outillageCaisse ? (
+                            <div
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => {
+                                const caisse = caisses.find(c => c.numeroCaisse === projetFormData.outillageCaisse);
+                                if (caisse) {
+                                  setPreviousView('detailProjet');
+                                  setCaisseFormData(caisse);
+                                  setProjetView('detailCaisse');
+                                } else {
+                                  showToast("Caisse introuvable", "danger");
+                                }
+                              }}
+                            >
+                              <div style={{ fontWeight: '800', fontSize: '1.3rem', color: 'var(--primary)' }}>{projetFormData.outillageCaisse}</div>
+                              <div style={{ fontSize: '0.95rem', color: 'var(--text-dim)', marginTop: '0.25rem' }}>
+                                Affecté à: {caisses.find(c => c.numeroCaisse === projetFormData.outillageCaisse)?.affecterA || "Personnel non identifié"}
+                              </div>
+                              <div style={{ fontSize: '0.85rem', color: 'var(--accent)', marginTop: '0.5rem', fontWeight: 'bold' }}>Voir le contenu complet →</div>
                             </div>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--accent)', marginTop: '0.2rem' }}>Voir le contenu →</div>
+                          ) : (
+                            <div style={{ color: 'var(--text-dim)', fontStyle: 'italic', fontSize: '1.1rem' }}>Aucune caisse assignée à ce projet</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="input-label" style={{ fontSize: '1.1rem' }}>Protections Collectives (EPC)</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '1rem', marginTop: '0.75rem' }}>
+                        {[
+                          { key: 'extincteurs', label: '🧯 Extincteurs' },
+                          { key: 'balisage', label: '🚧 Balisage' },
+                          { key: 'echafaudage', label: '🏗️ Échafaudage' },
+                          { key: 'gardecorps', label: '🛡️ Garde-corps' },
+                          { key: 'lignedevie', label: '⚓ Lignes de vie' },
+                          { key: 'eclairage', label: '💡 Éclairage' },
+                          { key: 'kitantipollution', label: '🧼 Anti-poll.' }
+                        ].filter(({ key }) => projetFormData.epc?.[key]).map(({ key, label }) => {
+                          const isSet = projetFormData.epc?.[key];
+                          return (
+                            <div key={key} style={{ padding: '0.8rem 1rem', borderRadius: '10px', background: 'var(--accent-glow)', border: '1px solid var(--accent)', opacity: 1, display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.9rem', transition: 'all 0.3s' }}>
+                              <span style={{ fontSize: '1.2rem' }}>✅</span>
+                              <span style={{ fontWeight: 'bold', color: '#fff' }}>{label}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {(!projetFormData.epc || !Object.values(projetFormData.epc).some(v => v)) && (
+                        <p style={{ color: 'var(--text-dim)', fontSize: '0.95rem', padding: '1rem', background: 'var(--card-bg-light)', borderRadius: '10px', textAlign: 'center', marginTop: '0.75rem' }}>Aucun équipement de protection collective n'a été coché pour ce projet.</p>
+                      )}
+                    </div>
+
+                  </div>
+
+                  {/* RIGHT COLUMN: Intervenants, Briefings */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3rem' }}>
+
+                    <div className="glass-card" style={{ padding: '1.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <label className="input-label" style={{ margin: 0, fontSize: '1.1rem' }}>Safety Briefings ({projetFormData.briefings?.length || 0})</label>
+                        <button className="btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', background: 'var(--info)' }} onClick={() => {
+                          const newBriefing = {
+                            id: Date.now().toString(),
+                            date: new Date().toISOString().split('T')[0],
+                            topic: 'Briefing Sécurité Quotidien',
+                            responsable: projetFormData.responsableChantier,
+                            intervenants: [...projetIntervenants]
+                          };
+                          setBriefingFormData(newBriefing);
+                          setSelectedBriefingIndex(null);
+                          setProjetView('editBriefing');
+                        }}>+ Nouveau Briefing</button>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '350px', overflowY: 'auto', paddingRight: '10px' }}>
+                        {projetFormData.briefings?.map((b, idx) => (
+                          <div key={b.id || idx} style={{ padding: '1.25rem', background: 'var(--bg-main)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-glass)', borderRadius: '12px', transition: 'transform 0.2s', ':hover': { transform: 'translateY(-2px)' } }}>
+                            <div>
+                              <div style={{ fontWeight: '800', fontSize: '1.05rem', color: '#fff', marginBottom: '0.4rem' }}>{b.topic}</div>
+                              <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', display: 'flex', gap: '1rem' }}>
+                                <span>📅 {b.date}</span>
+                                <span>👤 {b.responsable}</span>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              <button className="btn-icon" style={{ width: '36px', height: '36px', fontSize: '0.9rem', background: 'rgba(255,255,255,0.05)' }} onClick={() => {
+                                setBriefingFormData({ ...b });
+                                setSelectedBriefingIndex(idx);
+                                setProjetView('editBriefing');
+                              }}>✎</button>
+                              <button className="btn-icon" style={{ width: '36px', height: '36px', fontSize: '0.9rem', background: 'rgba(255,0,0,0.1)', color: 'var(--danger)' }} onClick={() => {
+                                const updatedBriefings = projetFormData.briefings.filter((_, i) => i !== idx);
+                                const updatedProj = {
+                                  ...projetFormData,
+                                  intervenants: projetIntervenants,
+                                  dateCreation: projets[selectedProjetIndex]?.dateCreation || new Date().toLocaleDateString('fr-FR'),
+                                  briefings: updatedBriefings
+                                };
+                                const newList = [...projets];
+                                newList[selectedProjetIndex] = updatedProj;
+                                setProjets(newList);
+                                apiCall('POST', '/projets', updatedProj);
+                                setProjetFormData(updatedProj);
+                                showToast("Briefing supprimé");
+                              }}>🗑</button>
+                            </div>
                           </div>
-                        ) : (
-                          <div style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>Aucune caisse assignée</div>
+                        ))}
+                        {(!projetFormData.briefings || projetFormData.briefings.length === 0) && (
+                          <div style={{ color: 'var(--text-dim)', fontSize: '0.95rem', textAlign: 'center', padding: '3rem 1rem', background: 'var(--card-bg-light)', borderRadius: '12px', border: '1px dashed var(--border-glass)' }}>
+                            <div style={{ fontSize: '2rem', marginBottom: '1rem', opacity: 0.5 }}>📝</div>
+                            Aucun briefing sécurité n'a encore été enregistré pour ce projet.
+                          </div>
                         )}
                       </div>
                     </div>
-                  </div>
-                  <div>
-                    <label className="input-label">Intervenants ({projetIntervenants.length})</label>
-                    {projetIntervenants.length === 0 ? (
-                      <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginTop: '0.25rem' }}>Aucun intervenant assigné.</p>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
-                        {projetIntervenants.map((intv, i) => (
-                          <div key={i} style={{ padding: '0.6rem 1rem', background: 'var(--card-bg-light)', borderRadius: '8px' }}>
-                            <span style={{ fontWeight: '600' }}>{intv.name}</span>
-                            <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem', marginLeft: '0.5rem' }}>— {intv.role}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
 
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem', marginTop: '1rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                      <label className="input-label" style={{ margin: 0 }}>Safety Briefings ({projetFormData.briefings?.length || 0})</label>
-                      <button className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }} onClick={() => {
-                        const newBriefing = {
-                          id: Date.now().toString(),
-                          date: new Date().toISOString().split('T')[0],
-                          topic: 'Briefing Sécurité Quotidien',
-                          responsable: projetFormData.responsableChantier,
-                          intervenants: [...projetIntervenants]
-                        };
-                        setBriefingFormData(newBriefing);
-                        setSelectedBriefingIndex(null);
-                        setProjetView('editBriefing');
-                      }}>+ Nouveau Briefing</button>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                      {projetFormData.briefings?.map((b, idx) => (
-                        <div key={b.id || idx} className="glass-card" style={{ padding: '1rem', background: 'var(--bg-main)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-glass)' }}>
-                          <div>
-                            <div style={{ fontWeight: '700', fontSize: '0.9rem' }}>{b.topic}</div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>📅 {b.date} — 👤 {b.responsable}</div>
-                          </div>
-                          <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button className="btn-icon" style={{ width: '30px', height: '30px', fontSize: '0.8rem' }} onClick={() => {
-                              setBriefingFormData({ ...b });
-                              setSelectedBriefingIndex(idx);
-                              setProjetView('editBriefing');
-                            }}>✎</button>
-                            <button className="btn-icon" style={{ width: '30px', height: '30px', fontSize: '0.8rem', color: 'var(--danger)' }} onClick={() => {
-                              const updatedBriefings = projetFormData.briefings.filter((_, i) => i !== idx);
-                              const updatedProj = {
-                                ...projetFormData,
-                                intervenants: projetIntervenants,
-                                dateCreation: projets[selectedProjetIndex]?.dateCreation || new Date().toLocaleDateString('fr-FR'),
-                                briefings: updatedBriefings
-                              };
-                              const newList = [...projets];
-                              newList[selectedProjetIndex] = updatedProj;
-                              setProjets(newList);
-                              apiCall('POST', '/projets', updatedProj);
-                              setProjetFormData(updatedProj);
-                              showToast("Briefing supprimé");
-                            }}>🗑</button>
-                          </div>
+                    <div>
+                      <label className="input-label" style={{ fontSize: '1.1rem' }}>Équipe d'Intervenants ({projetIntervenants.filter(intv => intv.name !== projetFormData.responsableChantier).length})</label>
+                      {projetIntervenants.filter(intv => intv.name !== projetFormData.responsableChantier).length === 0 ? (
+                        <p style={{ color: 'var(--text-dim)', fontSize: '0.95rem', padding: '1rem', background: 'var(--card-bg-light)', borderRadius: '10px', textAlign: 'center' }}>Aucun intervenant assigné.</p>
+                      ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem', marginTop: '1rem', maxHeight: '350px', overflowY: 'auto', paddingRight: '10px' }}>
+                          {projetIntervenants.filter(intv => intv.name !== projetFormData.responsableChantier).map((intv, i) => (
+                            <div key={i} style={{ padding: '1rem', background: 'var(--card-bg-light)', border: '1px solid var(--border-glass)', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                              <span style={{ fontWeight: '700', fontSize: '1rem' }}>{intv.name}</span>
+                              <span style={{ color: 'var(--accent)', fontSize: '0.85rem', fontWeight: '500' }}>{intv.role}</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                      {(!projetFormData.briefings || projetFormData.briefings.length === 0) && (
-                        <p style={{ color: 'var(--text-dim)', fontSize: '0.8rem', textAlign: 'center', padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '10px' }}>Aucun briefing enregistré pour ce projet.</p>
                       )}
                     </div>
-                  </div>
 
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem' }}>
-                    <label className="input-label">Protections Collectives (EPC)</label>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginTop: '0.75rem' }}>
-                      {[
-                        { key: 'extincteurs', label: '🧯 Extincteurs' },
-                        { key: 'balisage', label: '🚧 Balisage' },
-                        { key: 'echafaudage', label: '🏗️ Échafaudage' },
-                        { key: 'gardecorps', label: '🛡️ Garde-corps' },
-                        { key: 'lignedevie', label: '⚓ Lignes de vie' },
-                        { key: 'eclairage', label: '💡 Éclairage' },
-                        { key: 'kitantipollution', label: '🧼 Anti-poll.' }
-                      ].map(({ key, label }) => {
-                        const isSet = projetFormData.epc?.[key];
-                        return (
-                          <div key={key} style={{ padding: '0.6rem', borderRadius: '8px', background: isSet ? 'var(--accent-glow)' : 'var(--card-bg-light)', border: isSet ? '1px solid var(--accent)' : '1px solid transparent', opacity: isSet ? 1 : 0.4, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
-                            <span>{isSet ? '✅' : '⚪'}</span>
-                            <span style={{ fontWeight: isSet ? 'bold' : 'normal' }}>{label}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
                   </div>
                 </div>
               </div>
@@ -1769,7 +1809,9 @@ function App() {
                             <tr key={idx}>
                               <td style={{ border: '1px solid #333', padding: '8px', fontSize: '11px' }}>{intv.role}</td>
                               <td style={{ border: '1px solid #333', padding: '8px', fontSize: '11px', fontWeight: 'bold' }}>{intv.name}</td>
-                              <td style={{ border: '1px solid #333', padding: '8px' }}></td>
+                              <td style={{ border: '1px solid #333', padding: '4px', height: '40px', textAlign: 'center' }}>
+                                {(() => { const emp = employees.find(e => e.name === intv.name); return emp?.signature ? <img src={emp.signature} alt="sig" style={{ maxHeight: '36px', maxWidth: '120px', objectFit: 'contain' }} /> : null; })()}
+                              </td>
                             </tr>
                           ))}
                           {[...Array(Math.max(0, 18 - briefingFormData.intervenants.length))].map((_, i) => (
@@ -1806,7 +1848,7 @@ function App() {
                           Description des points et consignes évoquées
                         </div>
                         <div style={{ border: '1px solid #333', borderTop: 'none', padding: '20px', minHeight: '150px', fontSize: '12px', lineHeight: '1.6', color: '#333', whiteSpace: 'pre-wrap' }}>
-                          {briefingFormData.description || "BONJOUR A TOUS"}
+                          {briefingFormData.description || "Aucun commentaire spécifique."}
                         </div>
                       </div>
 
@@ -2178,6 +2220,27 @@ function App() {
                         <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                           {formData.aptitudeMedicale ? 'Certificat médical valide fourni.' : 'Aptitude non confirmée.'}
                         </p>
+                      </div>
+
+                      {/* Signature Upload */}
+                      <div className="glass-card" style={{ marginTop: '1.5rem', padding: '1.5rem', borderLeft: '4px solid var(--info)' }}>
+                        <h4 style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--info)', textTransform: 'uppercase', letterSpacing: '1px' }}>✍️ Signature</h4>
+                        {formData.signature ? (
+                          <div style={{ marginBottom: '1rem', background: '#fff', borderRadius: '8px', padding: '0.5rem', border: '1px solid var(--border-glass)' }}>
+                            <img src={formData.signature} alt="Signature" style={{ width: '100%', maxHeight: '80px', objectFit: 'contain' }} />
+                          </div>
+                        ) : (
+                          <div style={{ height: '60px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px dashed var(--border-glass)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem' }}>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Aucune signature déposée</span>
+                          </div>
+                        )}
+                        <label htmlFor="sig-up" className="btn-secondary" style={{ width: '100%', display: 'block', textAlign: 'center', cursor: 'pointer', padding: '0.5rem', fontSize: '0.8rem' }}>
+                          {formData.signature ? '🔄 Remplacer la signature' : '📤 Déposer une signature'}
+                        </label>
+                        <input type="file" id="sig-up" hidden accept="image/*" onChange={handleSignatureChange} />
+                        {formData.signature && (
+                          <button type="button" style={{ marginTop: '0.5rem', width: '100%', background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '0.75rem' }} onClick={() => setFormData(prev => ({ ...prev, signature: null }))}>Supprimer la signature</button>
+                        )}
                       </div>
                     </div>
 
