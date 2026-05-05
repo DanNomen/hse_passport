@@ -133,9 +133,9 @@
   background: var(--bg-input);
   border: 1px solid var(--border-glass);
   border-radius: 12px;
-  padding: 0.8rem 1.25rem;
+  padding: 0.9rem 1.4rem;
   color: var(--text-primary);
-  font-size: 0.95rem;
+  font-size: 1rem;
   transition: all 0.3s ease;
 }
 

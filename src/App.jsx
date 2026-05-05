@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { jsPDF } from 'jspdf'
 import html2canvas from 'html2canvas'
 import { Capacitor } from '@capacitor/core'
@@ -56,17 +56,27 @@ const getStatusLabel = (comp) => {
 
 const calculateProjectDuration = (startDate) => {
   if (!startDate) return '0 jour';
-  const start = new Date(startDate);
+
+  // Support both YYYY-MM-DD (input type=date) and DD/MM/YYYY (French format)
+  let start;
+  if (typeof startDate === 'string' && startDate.includes('/')) {
+    const [day, month, year] = startDate.split('/');
+    start = new Date(`${year}-${month}-${day}`);
+  } else {
+    start = new Date(startDate);
+  }
+
   const now = new Date();
 
-  // Set to midnight to compare full days
+  // Compare full days only (midnight)
   start.setHours(0, 0, 0, 0);
   now.setHours(0, 0, 0, 0);
 
   const diffTime = now.getTime() - start.getTime();
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
-  if (diffDays <= 0) return 'Début bientôt';
+  if (diffDays < 0) return `Début dans ${Math.abs(diffDays)} jour${Math.abs(diffDays) > 1 ? 's' : ''}`;
+  if (diffDays === 0) return "Aujourd'hui";
   return `${diffDays} jour${diffDays > 1 ? 's' : ''}`;
 };
 
@@ -200,6 +210,33 @@ function App() {
   const [caisseFormData, setCaisseFormData] = useState({ numeroCaisse: '', affecterA: '', materiels: [] })
   const [newMateriel, setNewMateriel] = useState('')
   const [previousView, setPreviousView] = useState(null)
+  const [permitFormData, setPermitFormData] = useState({
+    id: '', date: '', heureDebut: '', dateFinValidite: '', heureFinValidite: '',
+    lieuExact: '', piecesJointes: '', descriptionOperation: '',
+    typesTravaux: [], autreType: '', mesuresPrevention: [], materielSecours: '',
+    responsable: '', personnelsConcernes: [], intervenants: [], episPermit: [], precautionsGenerales: [],
+    elecTypes: [], elecPrecautions: [], elecAutre: '',
+    hauteurChute: '', hauteurToiture: '', hauteurToitType: '', hauteurPrecautions: [], hauteurAutre: '',
+    levagePrecautions: [], levageAutre: '',
+    fouillePrecautions: [],
+    fouilleAutre: '',
+    battagePrecautions: [],
+    battageAutre: '',
+    simopsPrecautions: [],
+    simopsDescription: '',
+    simopsAutre: '',
+    manutentionPrecautions: [],
+    manutentionAutre: '',
+    chaudPrecautions: [],
+    chaudNature: [],
+    chaudNatureAutre: '',
+    informationsAdditionnelles: '',
+    rempliPar: '',
+    validationHSE: '',
+    annulationRaison: '',
+    visaResponsable: false, visaSecurite: false
+  })
+  const [selectedPermitIndex, setSelectedPermitIndex] = useState(null)
 
   // Modal State
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, item: null, type: '' })
@@ -898,7 +935,6 @@ function App() {
             zIndex: 1000,
             transition: 'background 0.5s ease'
           }}>
-            {/* Left Side: Visual Branding */}
             <div style={{
               flex: '1.4',
               position: 'relative',
@@ -925,7 +961,6 @@ function App() {
               </div>
             </div>
 
-            {/* Right Side: Authentication/Hub */}
             <div style={{
               flex: '1',
               display: 'flex',
@@ -1067,6 +1102,10 @@ function App() {
                               <div style={{ fontWeight: '700', fontSize: '0.9rem' }}>{p.dateDebut}</div>
                             </div>
                             <div>
+                              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Durée</div>
+                              <div style={{ fontWeight: '800', fontSize: '0.9rem', color: 'var(--info)' }}>⏱ {calculateProjectDuration(p.dateDebut)}</div>
+                            </div>
+                            <div>
                               <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Intervenants</div>
                               <div style={{ fontWeight: '700', fontSize: '0.9rem' }}>{p.intervenants?.length || 0} Pers.</div>
                             </div>
@@ -1119,7 +1158,6 @@ function App() {
                   <h2 style={{ margin: 0 }}>Nouveau Projet</h2>
                 </div>
 
-                {/* Modern Step Indicator */}
                 <div style={{ display: 'flex', gap: '1rem', marginBottom: '3rem' }}>
                   {[1, 2, 3].map(step => (
                     <div key={step} style={{ flex: 1 }}>
@@ -1465,14 +1503,60 @@ function App() {
                     <button className="btn-icon" onClick={() => setProjetView('projet')}>←</button>
                     <h2 style={{ margin: 0, fontSize: '1.8rem' }}>Détails du Projet</h2>
                   </div>
-                  <div style={{ fontSize: '2.3rem', fontWeight: 'bold', color: 'var(--primary)' }}>
-                    {projetFormData.nomChantier}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                    <button className="btn-primary" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', boxShadow: '0 4px 15px rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={() => {
+                      setPermitFormData({
+                        id: Date.now().toString(),
+                        date: new Date().toISOString().split('T')[0],
+                        heureDebut: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+                        dateFinValidite: new Date().toISOString().split('T')[0],
+                        heureFinValidite: '17:00',
+                        lieuExact: projetFormData.lieu,
+                        piecesJointes: '', descriptionOperation: '', typesTravaux: [], autreType: '',
+                        mesuresPrevention: '', materielSecours: '',
+                        responsable: projetFormData.responsableChantier,
+                        personnelsConcernes: [
+                          ...(projetFormData.responsableChantier ? [projetFormData.responsableChantier] : []),
+                          ...projetIntervenants.filter(i => i.name !== projetFormData.responsableChantier).map(i => i.name)
+                        ],
+                        intervenants: [...projetIntervenants],
+                        episPermit: [],
+                        precautionsGenerales: [],
+                        elecTypes: [], elecPrecautions: [], elecAutre: '',
+                        hauteurChute: '', hauteurToiture: '', hauteurToitType: '', hauteurPrecautions: [], hauteurAutre: '',
+                        levagePrecautions: [], levageAutre: '',
+                        fouillePrecautions: [],
+                        fouilleAutre: '',
+                        battagePrecautions: [],
+                        battageAutre: '',
+                        simopsPrecautions: [],
+                        simopsDescription: '',
+                        simopsAutre: '',
+                        manutentionPrecautions: [],
+                        manutentionAutre: '',
+                        chaudNature: [],
+                        chaudNatureAutre: '',
+                        chaudPrecautions: [],
+                        mesuresPrevention: [],
+                        informationsAdditionnelles: '',
+                        rempliPar: '',
+                        validationHSE: '',
+                        annulationRaison: '',
+                        visaResponsable: false, visaSecurite: false
+                      });
+                      setSelectedPermitIndex(null);
+                      setProjetView('permitTravail');
+                    }}>
+                      Permis de Travail
+                    </button>
+                    <div style={{ fontSize: '2.3rem', fontWeight: 'bold', color: 'var(--primary)' }}>
+                      {projetFormData.nomChantier}
+                    </div>
                   </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '4rem' }}>
 
-                  {/* LEFT COLUMN: Infos, Caisse, EPC */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
 
                     <div className="glass-card" style={{ padding: '1.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
@@ -1489,6 +1573,14 @@ function App() {
                       <div>
                         <label className="input-label">Date de début</label>
                         <div style={{ fontWeight: '600', fontSize: '1.1rem' }}>📅 {projetFormData.dateDebut}</div>
+                      </div>
+                      <div style={{ gridColumn: 'span 2', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
+                        <label className="input-label">Durée du chantier</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <span style={{ fontSize: '2rem', fontWeight: '900', color: 'var(--info)' }}>{calculateProjectDuration(projetFormData.dateDebut).split(' ')[0]}</span>
+                          <span style={{ fontSize: '1rem', color: 'var(--text-muted)', fontWeight: '600' }}>{calculateProjectDuration(projetFormData.dateDebut).split(' ').slice(1).join(' ')}</span>
+                          <span style={{ marginLeft: 'auto', fontSize: '0.75rem', background: 'var(--info-glow)', color: 'var(--info)', padding: '4px 10px', borderRadius: '20px', fontWeight: '700', border: '1px solid var(--info)' }}>EN COURS</span>
+                        </div>
                       </div>
                     </div>
 
@@ -1552,7 +1644,6 @@ function App() {
 
                   </div>
 
-                  {/* RIGHT COLUMN: Intervenants, Briefings */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '3rem' }}>
 
                     <div className="glass-card" style={{ padding: '1.5rem' }}>
@@ -1619,7 +1710,7 @@ function App() {
                       <label className="input-label" style={{ fontSize: '1.1rem' }}>Équipe d'Intervenants ({projetIntervenants.filter(intv => intv.name !== projetFormData.responsableChantier).length})</label>
                       {projetIntervenants.filter(intv => intv.name !== projetFormData.responsableChantier).length === 0 ? (
                         <p style={{ color: 'var(--text-dim)', fontSize: '0.95rem', padding: '1rem', background: 'var(--card-bg-light)', borderRadius: '10px', textAlign: 'center' }}>Aucun intervenant assigné.</p>
-                      ) : (
+) : (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem', marginTop: '1rem', maxHeight: '350px', overflowY: 'auto', paddingRight: '10px' }}>
                           {projetIntervenants.filter(intv => intv.name !== projetFormData.responsableChantier).map((intv, i) => (
                             <div key={i} style={{ padding: '1rem', background: 'var(--card-bg-light)', border: '1px solid var(--border-glass)', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
@@ -1631,6 +1722,908 @@ function App() {
                       )}
                     </div>
 
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {projetView === 'permitTravail' && selectedProjetIndex !== null && (
+              <div className="animate-fade-in" style={{ maxWidth: '1400px', margin: '0 auto', display: 'grid', gridTemplateColumns: '420px 1fr', gap: '2rem' }}>
+                <div className="glass-panel" style={{ padding: '2rem', height: 'fit-content', position: 'sticky', top: '100px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+                    <button className="btn-icon" onClick={() => setProjetView('detailProjet')}>←</button>
+                    <h2 style={{ fontSize: '1.2rem', margin: 0 }}>Permis de Travail</h2>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <datalist id="all-employees-list">
+                      {employees.map(emp => (
+                        <option key={emp.id} value={emp.name}>{emp.position || 'Employé'}</option>
+                      ))}
+                    </datalist>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <div><label className="input-label">Date émission</label><input type="date" className="glass-input" value={permitFormData.date} readOnly /></div>
+                      <div><label className="input-label">Heure émission</label><input type="time" className="glass-input" value={permitFormData.heureDebut} readOnly /></div>
+                      <div><label className="input-label">Date fin de validité</label><input type="date" className="glass-input" value={permitFormData.dateFinValidite} readOnly /></div>
+                      <div><label className="input-label">Heure fin validité</label><input type="time" className="glass-input" value={permitFormData.heureFinValidite} readOnly /></div>
+                    </div>
+                    <div>
+                      <label className="input-label">Lieu / Site exact</label>
+                      <input type="text" className="glass-input" value={permitFormData.lieuExact} onChange={e => setPermitFormData({ ...permitFormData, lieuExact: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="input-label">Description de l'opération (travail & équipement concerné)</label>
+                      <textarea 
+                        className="glass-input" 
+                        style={{ minHeight: '140px', resize: 'vertical' }} 
+                        value={permitFormData.descriptionOperation} 
+                        onChange={e => setPermitFormData({ ...permitFormData, descriptionOperation: e.target.value })} 
+                        placeholder="Détaillez ici les travaux à effectuer et les équipements utilisés..."
+                      />
+                    </div>
+                    <div>
+                      <label className="input-label">Personnels concernés</label>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.5rem', maxHeight: '160px', overflowY: 'auto', paddingRight: '4px' }}>
+                        {projetFormData.responsableChantier && (
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.82rem', padding: '0.3rem 0.6rem', background: permitFormData.personnelsConcernes.includes(projetFormData.responsableChantier) ? 'rgba(99,102,241,0.12)' : 'transparent', borderRadius: '6px', border: `1px solid ${permitFormData.personnelsConcernes.includes(projetFormData.responsableChantier) ? 'var(--primary)' : 'var(--border-glass)'}` }}>
+                            <input type="checkbox" checked={permitFormData.personnelsConcernes.includes(projetFormData.responsableChantier)} onChange={e => setPermitFormData({ ...permitFormData, personnelsConcernes: e.target.checked ? [...permitFormData.personnelsConcernes, projetFormData.responsableChantier] : permitFormData.personnelsConcernes.filter(x => x !== projetFormData.responsableChantier) })} />
+                            <span> {projetFormData.responsableChantier}</span>
+                          </label>
+                        )}
+                        {projetIntervenants.filter(i => i.name !== projetFormData.responsableChantier).map((intv, idx) => (
+                          <label key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.82rem', padding: '0.3rem 0.6rem', background: permitFormData.personnelsConcernes.includes(intv.name) ? 'rgba(99,102,241,0.12)' : 'transparent', borderRadius: '6px', border: `1px solid ${permitFormData.personnelsConcernes.includes(intv.name) ? 'var(--primary)' : 'var(--border-glass)'}` }}>
+                            <input type="checkbox" checked={permitFormData.personnelsConcernes.includes(intv.name)} onChange={e => setPermitFormData({ ...permitFormData, personnelsConcernes: e.target.checked ? [...permitFormData.personnelsConcernes, intv.name] : permitFormData.personnelsConcernes.filter(x => x !== intv.name) })} />
+                            <span>{intv.name} <span style={{ color: 'var(--accent)', fontSize: '0.75rem' }}>({intv.role})</span></span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="input-label">Types de travaux</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', marginTop: '0.5rem' }}>
+                        {['Travail à chaud', 'Travaux électriques', 'Travail en hauteur', 'Travaux de fouille', 'Travaux de manutention', 'Levage', 'Travaux de battage', 'Co-activité SIMOPS', 'Autres'].map(t => (
+                          <label key={t} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.82rem', padding: '0.3rem 0.5rem', background: permitFormData.typesTravaux.includes(t) ? 'var(--info-glow)' : 'transparent', borderRadius: '6px', border: `1px solid ${permitFormData.typesTravaux.includes(t) ? 'var(--info)' : 'var(--border-glass)'}` }}>
+                            <input type="checkbox" checked={permitFormData.typesTravaux.includes(t)} onChange={e => setPermitFormData({ ...permitFormData, typesTravaux: e.target.checked ? [...permitFormData.typesTravaux, t] : permitFormData.typesTravaux.filter(x => x !== t) })} />{t}
+                          </label>
+                        ))}
+                      </div>
+                      {permitFormData.typesTravaux.includes('Autres') && (
+                        <div style={{ marginTop: '0.5rem' }}>
+                          <input type="text" className="glass-input" placeholder="Précisez l'autre type de travail..." value={permitFormData.autreType} onChange={e => setPermitFormData({ ...permitFormData, autreType: e.target.value })} />
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '10px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '12px', border: '1px solid var(--border-glass)' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: '800', color: 'var(--primary)', textTransform: 'uppercase', marginBottom: '1rem' }}>🛡️ EPI à utiliser</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.8rem' }}>
+                          {['Combinaison', 'Chaussure de sécurité', 'Harnais de sécurité', 'Gant de travail', 'Gants électrique', 'Lunettes de protection', 'Casques', 'Protection auditives', 'Gants mécaniques', 'Gants chimiques'].map(e => (
+                            <label key={e} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem' }}>
+                              <input type="checkbox" checked={permitFormData.episPermit.includes(e)} onChange={ev => setPermitFormData({ ...permitFormData, episPermit: ev.target.checked ? [...permitFormData.episPermit, e] : permitFormData.episPermit.filter(x => x !== e) })} /> {e}
+                            </label>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: '800', color: 'var(--primary)', textTransform: 'uppercase', marginBottom: '1rem' }}>🛡️ Précautions générales</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          {['Extincteur', 'Moyen de communication', 'Balisage zone à risque', 'Validation PM ou Responsable site', 'TBT – Briefing avant de démarrer'].map(p => (
+                            <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.75rem' }}>
+                              <input type="checkbox" checked={permitFormData.precautionsGenerales.includes(p)} onChange={ev => setPermitFormData({ ...permitFormData, precautionsGenerales: ev.target.checked ? [...permitFormData.precautionsGenerales, p] : permitFormData.precautionsGenerales.filter(x => x !== p) })} /> {p}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {permitFormData.typesTravaux.includes('Travail à chaud') && (
+                        <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#ef4444', textTransform: 'uppercase', marginBottom: '1rem' }}>🔥 Travail à chaud</div>
+                          <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#ef4444', marginBottom: '0.5rem', marginTop: '0.5rem' }}>NATURE DES TRAVAUX</div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', marginBottom: '1rem' }}>
+                            {['Soudure', 'Meulage', 'Découpe', 'Brasage', 'Autre'].map(n => (
+                              <label key={n} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem' }}>
+                                <input type="checkbox" checked={permitFormData.chaudNature.includes(n)} onChange={e => setPermitFormData({ ...permitFormData, chaudNature: e.target.checked ? [...permitFormData.chaudNature, n] : permitFormData.chaudNature.filter(x => x !== n) })} /> {n}
+                              </label>
+                            ))}
+                          </div>
+                          {permitFormData.chaudNature.includes('Autre') && (
+                            <input type="text" className="glass-input" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', marginBottom: '1rem' }} placeholder="Précisez la nature..." value={permitFormData.chaudNatureAutre} onChange={e => setPermitFormData({ ...permitFormData, chaudNatureAutre: e.target.value })} />
+                          )}
+
+                          <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#ef4444', marginBottom: '0.5rem' }}>MESURES DE PRÉVENTION</div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                            {[
+                              'Inspection avant démarrage travaux',
+                              'Mise en place de bâche ignifugée',
+                              'Surveillance en continue',
+                              'Moyen d’extinction disponible (2 extincteurs à poudre)',
+                              'Balisage de la zone de travail',
+                              'Coordination'
+                            ].map(p => (
+                              <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.75rem' }}>
+                                <input type="checkbox" checked={permitFormData.chaudPrecautions.includes(p)} onChange={e => setPermitFormData({ ...permitFormData, chaudPrecautions: e.target.checked ? [...permitFormData.chaudPrecautions, p] : permitFormData.chaudPrecautions.filter(x => x !== p) })} /> {p}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {permitFormData.typesTravaux.includes('Travaux électriques') && (
+                        <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(245, 158, 11, 0.05)', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#f59e0b', textTransform: 'uppercase', marginBottom: '1rem' }}>⚡ Travaux Électriques</div>
+                          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>
+                            {['Travaux BT', 'Travaux HT', 'Tension > 50V'].map(t => (
+                              <label key={t} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem' }}>
+                                <input type="checkbox" checked={permitFormData.elecTypes.includes(t)} onChange={e => setPermitFormData({ ...permitFormData, elecTypes: e.target.checked ? [...permitFormData.elecTypes, t] : permitFormData.elecTypes.filter(x => x !== t) })} /> {t}
+                              </label>
+                            ))}
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {[
+                              'Consignation des installations',
+                              'Ensemble de l’installation hors tension',
+                              'Zone d’exclusion balisée',
+                              'Personnel intervenant sur les zones à risques formé et/ou certifié',
+                              'TBT – Briefing avant de démarrer',
+                              'Autre'
+                            ].map(p => (
+                              <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.75rem' }}>
+                                <input type="checkbox" checked={permitFormData.elecPrecautions.includes(p)} onChange={e => setPermitFormData({ ...permitFormData, elecPrecautions: e.target.checked ? [...permitFormData.elecPrecautions, p] : permitFormData.elecPrecautions.filter(x => x !== p) })} /> {p}
+                              </label>
+                            ))}
+                          </div>
+                          {permitFormData.elecPrecautions.includes('Autre') && (
+                            <input type="text" className="glass-input" style={{ marginTop: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} placeholder="Précisez..." value={permitFormData.elecAutre} onChange={e => setPermitFormData({ ...permitFormData, elecAutre: e.target.value })} />
+                          )}
+                        </div>
+                      )}
+
+                      {permitFormData.typesTravaux.includes('Travail en hauteur') && (
+                        <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#10b981', textTransform: 'uppercase', marginBottom: '1rem' }}>🏗️ Travail en Hauteur</div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                            <div>
+                              <label className="input-label" style={{ fontSize: '0.65rem' }}>Hauteur de chute</label>
+                              <select className="glass-input" style={{ fontSize: '0.75rem', padding: '0.3rem' }} value={permitFormData.hauteurChute} onChange={e => setPermitFormData({ ...permitFormData, hauteurChute: e.target.value })}>
+                                <option value="">Choisir...</option>
+                                {['<3m', '3 à 8 m', '8 à 40 m', '>40m'].map(h => <option key={h} value={h}>{h}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="input-label" style={{ fontSize: '0.65rem' }}>Toiture</label>
+                              <select className="glass-input" style={{ fontSize: '0.75rem', padding: '0.3rem' }} value={permitFormData.hauteurToiture} onChange={e => setPermitFormData({ ...permitFormData, hauteurToiture: e.target.value })}>
+                                <option value="Non">Non</option>
+                                <option value="Oui">Oui</option>
+                              </select>
+                            </div>
+                          </div>
+                          {permitFormData.hauteurToiture === 'Oui' && (
+                            <div style={{ marginBottom: '1rem' }}>
+                              <label className="input-label" style={{ fontSize: '0.65rem' }}>Type de toit</label>
+                              <select className="glass-input" style={{ fontSize: '0.75rem', padding: '0.3rem' }} value={permitFormData.hauteurToitType} onChange={e => setPermitFormData({ ...permitFormData, hauteurToitType: e.target.value })}>
+                                <option value="">Choisir...</option>
+                                {['Toit plat', 'Légère inclinaison', 'Forte inclinaison'].map(t => <option key={t} value={t}>{t}</option>)}
+                              </select>
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {[
+                              'Accès et sortie sûrs et sécurisés',
+                              'La plate-forme, la scène ou l\'échafaudage sont montés et vérifiés comme étant sûrs pour le travail',
+                              'Des points d\'ancrage adéquats ont été localisés pour les longes et lignes de vie',
+                              'Mise en œuvre de mesures d\'atténuation des risques de chute (longes d\'outils, balisage des zones à risque..)',
+                              'Échafaudage / échelle approuvé (le cas échéant)',
+                              'Autre'
+                            ].map(p => (
+                              <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.75rem' }}>
+                                <input type="checkbox" checked={permitFormData.hauteurPrecautions.includes(p)} onChange={e => setPermitFormData({ ...permitFormData, hauteurPrecautions: e.target.checked ? [...permitFormData.hauteurPrecautions, p] : permitFormData.hauteurPrecautions.filter(x => x !== p) })} /> {p}
+                              </label>
+                            ))}
+                          </div>
+                          {permitFormData.hauteurPrecautions.includes('Autre') && (
+                            <input type="text" className="glass-input" style={{ marginTop: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} placeholder="Précisez..." value={permitFormData.hauteurAutre} onChange={e => setPermitFormData({ ...permitFormData, hauteurAutre: e.target.value })} />
+                          )}
+                        </div>
+                      )}
+
+                      {permitFormData.typesTravaux.includes('Levage') && (
+                        <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#3b82f6', textTransform: 'uppercase', marginBottom: '1rem' }}>⛓️ Levage</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {[
+                              'Approbation du plan de levage',
+                              'EPI adapté à l’opération',
+                              'Balisage de la zone de levage – pas de passage sous les charges',
+                              'L’ensemble du matériel est certifié',
+                              'Inspection préalable des engins à utiliser (Nacelle, grue...)',
+                              'Autre'
+                            ].map(p => (
+                              <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.75rem' }}>
+                                <input type="checkbox" checked={permitFormData.levagePrecautions.includes(p)} onChange={e => setPermitFormData({ ...permitFormData, levagePrecautions: e.target.checked ? [...permitFormData.levagePrecautions, p] : permitFormData.levagePrecautions.filter(x => x !== p) })} /> {p}
+                              </label>
+                            ))}
+                          </div>
+                          {permitFormData.levagePrecautions.includes('Autre') && (
+                            <input type="text" className="glass-input" style={{ marginTop: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} placeholder="Précisez..." value={permitFormData.levageAutre} onChange={e => setPermitFormData({ ...permitFormData, levageAutre: e.target.value })} />
+                          )}
+                        </div>
+                      )}
+
+                      {permitFormData.typesTravaux.includes('Travaux de fouille') && (
+                        <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(120, 113, 108, 0.05)', borderRadius: '12px', border: '1px solid rgba(120, 113, 108, 0.2)' }}>
+                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#78716c', textTransform: 'uppercase', marginBottom: '1rem' }}>🚜 Fouille</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {[
+                              'Vérification de la stabilité du sol',
+                              'Balisage de la zone de travail',
+                              'Organisation propre du chantier',
+                              'Inspection et repérage avant démarrage des travaux',
+                              'Vérification des réseaux souterrains',
+                              'Interdiction de passage non autorisé',
+                              'Autre'
+                            ].map(p => (
+                              <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.75rem' }}>
+                                <input type="checkbox" checked={permitFormData.fouillePrecautions.includes(p)} onChange={e => setPermitFormData({ ...permitFormData, fouillePrecautions: e.target.checked ? [...permitFormData.fouillePrecautions, p] : permitFormData.fouillePrecautions.filter(x => x !== p) })} /> {p}
+                              </label>
+                            ))}
+                          </div>
+                          {permitFormData.fouillePrecautions.includes('Autre') && (
+                            <input type="text" className="glass-input" style={{ marginTop: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} placeholder="Précisez..." value={permitFormData.fouilleAutre} onChange={e => setPermitFormData({ ...permitFormData, fouilleAutre: e.target.value })} />
+                          )}
+                        </div>
+                      )}
+
+                      {permitFormData.typesTravaux.includes('Co-activité SIMOPS') && (
+                        <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(139, 92, 246, 0.05)', borderRadius: '12px', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
+                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#8b5cf6', textTransform: 'uppercase', marginBottom: '1rem' }}>🔄 SIMOPS</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                            {[
+                              'Nomination d’un coordinateur bien identifié sur site ayant autorité',
+                              'Mise en place d’un plan B en cas d’interférence augmentant le risque',
+                              'TBT – pré briefing en présence des 2 équipes',
+                              'Autre'
+                            ].map(p => (
+                              <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.75rem' }}>
+                                <input type="checkbox" checked={permitFormData.simopsPrecautions.includes(p)} onChange={e => setPermitFormData({ ...permitFormData, simopsPrecautions: e.target.checked ? [...permitFormData.simopsPrecautions, p] : permitFormData.simopsPrecautions.filter(x => x !== p) })} /> {p}
+                              </label>
+                            ))}
+                          </div>
+                          
+                          <div style={{ marginTop: '1rem' }}>
+                            <label className="input-label" style={{ fontSize: '0.7rem', color: '#8b5cf6' }}>Description des différentes co-activités:</label>
+                            <textarea className="glass-input" style={{ width: '100%', minHeight: '80px', fontSize: '0.8rem', padding: '0.5rem' }} value={permitFormData.simopsDescription} onChange={e => setPermitFormData({ ...permitFormData, simopsDescription: e.target.value })} placeholder="Détaillez les interactions..."></textarea>
+                          </div>
+
+                          {permitFormData.simopsPrecautions.includes('Autre') && (
+                            <input type="text" className="glass-input" style={{ marginTop: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} placeholder="Précisez..." value={permitFormData.simopsAutre} onChange={e => setPermitFormData({ ...permitFormData, simopsAutre: e.target.value })} />
+                          )}
+                        </div>
+                      )}
+                      {permitFormData.typesTravaux.includes('Travaux de manutention') && (
+                        <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(20, 184, 166, 0.05)', borderRadius: '12px', border: '1px solid rgba(20, 184, 166, 0.2)' }}>
+                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#14b8a6', textTransform: 'uppercase', marginBottom: '1rem' }}>📦 Manutention</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {[
+                              'Sécurisation de la charge avant toute manipulation',
+                              'Respect de la charge réglementaire',
+                              'Travail en binôme',
+                              'Supervision tout au long de l’opération',
+                              'Coordination',
+                              'Autre'
+                            ].map(p => (
+                              <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.75rem' }}>
+                                <input type="checkbox" checked={permitFormData.manutentionPrecautions.includes(p)} onChange={e => setPermitFormData({ ...permitFormData, manutentionPrecautions: e.target.checked ? [...permitFormData.manutentionPrecautions, p] : permitFormData.manutentionPrecautions.filter(x => x !== p) })} /> {p}
+                              </label>
+                            ))}
+                          </div>
+                          {permitFormData.manutentionPrecautions.includes('Autre') && (
+                            <input type="text" className="glass-input" style={{ marginTop: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} placeholder="Précisez..." value={permitFormData.manutentionAutre} onChange={e => setPermitFormData({ ...permitFormData, manutentionAutre: e.target.value })} />
+                          )}
+                        </div>
+                      )}
+
+                      {permitFormData.typesTravaux.includes('Travaux de battage') && (
+                        <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(244, 63, 94, 0.05)', borderRadius: '12px', border: '1px solid rgba(244, 63, 94, 0.2)' }}>
+                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#f43f5e', textTransform: 'uppercase', marginBottom: '1rem' }}>🔨 Battage</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {[
+                              'Repérage préalable',
+                              'Limitation de puissance',
+                              'Surveillance en continu de l’opération',
+                              'Balisage de la zone de travail et de la zone de sécurité',
+                              'Utilisation des plaques d’appui au sol',
+                              'Rotation du personnel',
+                              'Vérification du sol avant travaux',
+                              'Autre'
+                            ].map(p => (
+                              <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.75rem' }}>
+                                <input type="checkbox" checked={permitFormData.battagePrecautions.includes(p)} onChange={e => setPermitFormData({ ...permitFormData, battagePrecautions: e.target.checked ? [...permitFormData.battagePrecautions, p] : permitFormData.battagePrecautions.filter(x => x !== p) })} /> {p}
+                              </label>
+                            ))}
+                          </div>
+                          {permitFormData.battagePrecautions.includes('Autre') && (
+                            <input type="text" className="glass-input" style={{ marginTop: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} placeholder="Précisez..." value={permitFormData.battageAutre} onChange={e => setPermitFormData({ ...permitFormData, battageAutre: e.target.value })} />
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div><label className="input-label">Raison d'annulation (si applicable)</label><input type="text" className="glass-input" value={permitFormData.annulationRaison} onChange={e => setPermitFormData({ ...permitFormData, annulationRaison: e.target.value })} placeholder="Pourquoi le travail a-t-il été annulé ?" /></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <div><label className="input-label">Rempli par</label><input type="text" className="glass-input" list="all-employees-list" value={permitFormData.rempliPar} onChange={e => setPermitFormData({ ...permitFormData, rempliPar: e.target.value })} /></div>
+                      <div><label className="input-label">Superviseur</label><select className="glass-input" value={permitFormData.responsable} onChange={e => setPermitFormData({ ...permitFormData, responsable: e.target.value })}><option value="">Choisir...</option>{employees.map(emp => <option key={emp.id} value={emp.name}>{emp.name}</option>)}</select></div>
+                    </div>
+                    <div><label className="input-label">Validation HSE/OPS</label><input type="text" className="glass-input" list="all-employees-list" value={permitFormData.validationHSE} onChange={e => setPermitFormData({ ...permitFormData, validationHSE: e.target.value })} /></div>
+                  </div>
+                </div>
+
+                <div style={{ position: 'relative' }}>
+                  <div style={{ position: 'absolute', top: '-50px', right: 0 }}>
+                    <button className="btn-primary" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }} onClick={async () => {
+                      try {
+                        showToast("Génération du Permis A4...", "info");
+                        const page1 = document.getElementById('permit-page-1');
+                        const page2 = document.getElementById('permit-page-2');
+                        const waitForImages = (el) => {
+                          const imgs = Array.from(el.querySelectorAll('img'));
+                          return Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })));
+                        };
+                        await Promise.all([waitForImages(page1), waitForImages(page2)]);
+                        const captureOptions = { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff' };
+                        const canvas1 = await html2canvas(page1, captureOptions);
+                        const canvas2 = await html2canvas(page2, captureOptions);
+                        const pdf = new jsPDF('p', 'mm', 'a4');
+                        const pdfWidth = pdf.internal.pageSize.getWidth();
+                        const pdfHeight = pdf.internal.pageSize.getHeight();
+                        pdf.addImage(canvas1.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, pdfHeight);
+                        pdf.addPage();
+                        pdf.addImage(canvas2.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, pdfHeight);
+                        pdf.save(`Permis_Travail_${projetFormData.nomChantier}_${permitFormData.date}.pdf`);
+                        showToast("PDF A4 généré !");
+                      } catch (err) { showToast("Erreur: " + err.message, "danger"); }
+                    }}>🖨️ Imprimer / PDF</button>
+                  </div>
+
+                  <div style={{ position: 'relative' }}>
+                    <div style={{ position: 'absolute', top: '-50px', right: 0 }}>
+                      <button className="btn-primary" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }} onClick={async () => {
+                        try {
+                          showToast("Génération du PWT dynamique...", "info");
+                          const element = document.getElementById('permit-printable');
+                          const waitForImages = (el) => {
+                            const imgs = Array.from(el.querySelectorAll('img'));
+                            return Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })));
+                          };
+                          await waitForImages(element);
+                          
+                          const canvas = await html2canvas(element, { 
+                            scale: 2, 
+                            useCORS: true, 
+                            allowTaint: true, 
+                            backgroundColor: '#ffffff',
+                            logging: false
+                          });
+                          
+                          const pdf = new jsPDF('p', 'mm', 'a4');
+                          const imgData = canvas.toDataURL('image/png');
+                          const pdfWidth = pdf.internal.pageSize.getWidth();
+                          const pdfHeight = pdf.internal.pageSize.getHeight();
+                          const imgWidth = pdfWidth;
+                          const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                          
+                          let heightLeft = imgHeight;
+                          let position = 0;
+
+                          // Page 1
+                          pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                          heightLeft -= pdfHeight;
+
+                          // Subsequent pages
+                          while (heightLeft >= 0) {
+                            position = heightLeft - imgHeight;
+                            pdf.addPage();
+                            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                            heightLeft -= pdfHeight;
+                          }
+                          
+                          pdf.save(`PWT_${projetFormData.nomChantier}_${permitFormData.date}.pdf`);
+                          showToast("PDF dynamique généré !");
+                        } catch (err) { showToast("Erreur: " + err.message, "danger"); }
+                      }}>🖨️ Imprimer / PDF</button>
+                    </div>
+
+                    <div id="permit-printable" style={{ background: 'white', color: 'black', padding: '10mm 12mm', width: '210mm', minHeight: '297mm', margin: '0 auto', fontFamily: 'Arial, sans-serif', boxSizing: 'border-box', fontSize: '9px', boxShadow: '0 0 20px rgba(0,0,0,0.1)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <img src={logo} crossOrigin="anonymous" alt="Logo" style={{ height: '55px' }} />
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#333' }}>Permis de Travail</div>
+                          <div style={{ fontSize: '9px', color: '#555' }}>MGP-FRM-01.e.003-ver.01</div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'center', fontSize: '15px', fontWeight: '900', borderTop: '1.5px solid black', borderBottom: '1.5px solid black', padding: '5px 0', marginBottom: '8px' }}>Permis de travail (PWT)</div>
+                      
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', marginBottom: '4px' }}>
+                        <tbody>
+                          <tr>
+                            <td style={{ border: '1px solid #555', padding: '5px 6px', width: '22%', verticalAlign: 'top' }}>
+                              <div style={{ fontWeight: 'bold', fontSize: '7.5px', textTransform: 'uppercase', color: '#555' }}>PROJET:</div>
+                              <div style={{ fontWeight: 'bold' }}>{projetFormData.nomChantier}</div>
+                            </td>
+                            <td style={{ border: '1px solid #555', padding: '5px 6px', width: '24%', verticalAlign: 'top' }}>
+                              <div style={{ fontSize: '7.5px', color: '#555' }}>LIEU / SITE EXACT:</div>
+                              <div style={{ fontWeight: 'bold' }}>{permitFormData.lieuExact}</div>
+                            </td>
+                            <td style={{ border: '1px solid #555', padding: '5px 6px', width: '36%', verticalAlign: 'top' }}>
+                              <div style={{ fontSize: '7.5px', color: '#555' }}>PERSONNELS CONCERNÉS:</div>
+                              <div style={{ fontSize: '8.5px', lineHeight: '1.4' }}>{permitFormData.personnelsConcernes.join(', ')}</div>
+                            </td>
+                            <td style={{ border: '1px solid #555', padding: '5px 6px', width: '18%', verticalAlign: 'top' }}>
+                              <div style={{ fontSize: '7.5px', color: '#555' }}>SUPERVISEUR:</div>
+                              <div style={{ fontWeight: 'bold' }}>{permitFormData.responsable}</div>
+                              {(() => { const emp = employees.find(e => e.name === permitFormData.responsable); return emp?.signature ? <img src={emp.signature} alt="sig" style={{ maxHeight: '28px', maxWidth: '90px', objectFit: 'contain', display: 'block', marginTop: '4px' }} /> : <div style={{ height: '28px', borderBottom: '1px solid #aaa', marginTop: '4px' }}></div>; })()}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', marginBottom: '4px' }}>
+                        <tbody>
+                          <tr>
+                            <td style={{ border: '1px solid #555', padding: '5px 6px', width: '50%' }}>
+                              <div style={{ fontWeight: 'bold' }}>PWT émission: {permitFormData.date} à {permitFormData.heureDebut}</div>
+                            </td>
+                            <td style={{ border: '1px solid #555', padding: '5px 6px', width: '50%' }}>
+                              <div style={{ fontWeight: 'bold' }}>PWT fin de validité: {permitFormData.dateFinValidite} à {permitFormData.heureFinValidite}</div>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '8.5px', marginBottom: '4px' }}>
+                        <tbody>
+                          <tr style={{ background: '#f5f5f5' }}>
+                            <td colSpan={7} style={{ border: '1px solid #000', padding: '3px 6px', fontWeight: 'bold' }}>Ce permis est valide pour:</td>
+                          </tr>
+                          <tr>
+                            {/* Row 1 */}
+                            <td style={{ border: '1px solid #000', padding: '0', width: '25px', textAlign: 'center', height: '22px' }}>
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <div style={{ width: '12px', height: '12px', border: '1.5px solid #000', background: permitFormData.typesTravaux.includes('Travail à chaud') ? '#000' : 'none', color: '#fff', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: '1' }}>
+                                  {permitFormData.typesTravaux.includes('Travail à chaud') ? '✓' : ''}
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ border: '1px solid #000', padding: '3px 6px', width: '18%', fontWeight: 'bold' }}>Travail à chaud</td>
+                            
+                            <td style={{ border: '1px solid #000', padding: '0', width: '25px', textAlign: 'center', height: '22px' }}>
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <div style={{ width: '12px', height: '12px', border: '1.5px solid #000', background: permitFormData.typesTravaux.includes('Travaux électriques') ? '#000' : 'none', color: '#fff', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: '1' }}>
+                                  {permitFormData.typesTravaux.includes('Travaux électriques') ? '✓' : ''}
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ border: '1px solid #000', padding: '3px 6px', width: '18%', fontWeight: 'bold' }}>Travaux électriques</td>
+
+                            <td style={{ border: '1px solid #000', padding: '0', width: '25px', textAlign: 'center', height: '22px' }}>
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <div style={{ width: '12px', height: '12px', border: '1.5px solid #000', background: permitFormData.typesTravaux.includes('Travail en hauteur') ? '#000' : 'none', color: '#fff', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: '1' }}>
+                                  {permitFormData.typesTravaux.includes('Travail en hauteur') ? '✓' : ''}
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ border: '1px solid #000', padding: '3px 6px', width: '18%', fontWeight: 'bold' }}>Travail en hauteur</td>
+
+                            <td rowSpan={3} style={{ border: '1px solid #000', padding: '4px 6px', width: '30%', verticalAlign: 'top' }}>
+                              <div style={{ fontWeight: 'bold', fontSize: '8px', marginBottom: '4px' }}>Description de l'opération (travail & équipement concerné) :</div>
+                              <div style={{ fontSize: '8.5px', lineHeight: '1.2', color: '#333' }}>{permitFormData.descriptionOperation}</div>
+                            </td>
+                          </tr>
+                          <tr>
+                            {/* Row 2 */}
+                            <td style={{ border: '1px solid #000', padding: '0', textAlign: 'center' }}>
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <div style={{ width: '11px', height: '11px', border: '1.2px solid #000', background: permitFormData.typesTravaux.includes('Travaux de fouille') ? '#000' : 'none', color: '#fff', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {permitFormData.typesTravaux.includes('Travaux de fouille') ? '✓' : ''}
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ border: '1px solid #000', padding: '3px 6px', fontWeight: 'bold' }}>Travaux de fouille</td>
+
+                            <td style={{ border: '1px solid #000', padding: '0', textAlign: 'center' }}>
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <div style={{ width: '11px', height: '11px', border: '1.2px solid #000', background: permitFormData.typesTravaux.includes('Travaux de manutention') ? '#000' : 'none', color: '#fff', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {permitFormData.typesTravaux.includes('Travaux de manutention') ? '✓' : ''}
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ border: '1px solid #000', padding: '3px 6px', fontWeight: 'bold' }}>Travaux de manutention</td>
+
+                            <td style={{ border: '1px solid #000', padding: '0', textAlign: 'center' }}>
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <div style={{ width: '11px', height: '11px', border: '1.2px solid #000', background: permitFormData.typesTravaux.includes('Levage') ? '#000' : 'none', color: '#fff', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {permitFormData.typesTravaux.includes('Levage') ? '✓' : ''}
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ border: '1px solid #000', padding: '3px 6px', fontWeight: 'bold' }}>Levage</td>
+                          </tr>
+                          <tr>
+                            {/* Row 3 */}
+                            <td style={{ border: '1px solid #000', padding: '0', textAlign: 'center' }}>
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <div style={{ width: '11px', height: '11px', border: '1.2px solid #000', background: permitFormData.typesTravaux.includes('Travaux de battage') ? '#000' : 'none', color: '#fff', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {permitFormData.typesTravaux.includes('Travaux de battage') ? '✓' : ''}
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ border: '1px solid #000', padding: '3px 6px', fontWeight: 'bold' }}>Travaux de battage</td>
+
+                            <td style={{ border: '1px solid #000', padding: '0', textAlign: 'center' }}>
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <div style={{ width: '11px', height: '11px', border: '1.2px solid #000', background: permitFormData.typesTravaux.includes('Co-activité SIMOPS') ? '#000' : 'none', color: '#fff', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {permitFormData.typesTravaux.includes('Co-activité SIMOPS') ? '✓' : ''}
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ border: '1px solid #000', padding: '3px 6px', fontWeight: 'bold' }}>Co-activité SIMOPS</td>
+
+                            <td style={{ border: '1px solid #000', padding: '0', textAlign: 'center' }}>
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <div style={{ width: '11px', height: '11px', border: '1.2px solid #000', background: permitFormData.typesTravaux.includes('Autres') ? '#000' : 'none', color: '#fff', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {permitFormData.typesTravaux.includes('Autres') ? '✓' : ''}
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ border: '1px solid #000', padding: '3px 6px', fontWeight: 'bold' }}>
+                              Autres: <span style={{ fontWeight: 'normal' }}>{permitFormData.autreType || '________________'}</span>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', marginBottom: '4px' }}>
+                          <tbody>
+                            <tr style={{ background: '#f5f5f5' }}>
+                              <td colSpan={10} style={{ border: '1px solid #000', padding: '4px 6px', fontWeight: 'bold', fontSize: '9.5px' }}>EPI à utiliser - Tout le personnel doit être proprement équipé pour la tache envisagée</td>
+                            </tr>
+                            {[
+                              ['Combinaison', 'Chaussure de sécurité', 'Harnais de sécurité', 'Gant de travail', 'Gants électrique'],
+                              ['Lunettes de protection', 'Casques', 'Protection auditives', 'Gants mécaniques', 'Gants chimiques']
+                            ].map((row, rIdx) => (
+                              <tr key={rIdx}>
+                                {row.map((item, iIdx) => (
+                                  <React.Fragment key={iIdx}>
+                                    <td style={{ border: '1px solid #000', padding: '3px', width: '22px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <div style={{ width: '12px', height: '12px', border: '1.5px solid #000', background: permitFormData.episPermit.includes(item) ? '#000' : 'none', color: '#fff', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: '1' }}>
+                                          {permitFormData.episPermit.includes(item) ? '✓' : ''}
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td style={{ border: '1px solid #000', padding: '3px 4px', width: '17.5%', fontSize: '8.5px', verticalAlign: 'middle', lineHeight: '1.1' }}>{item}</td>
+                                  </React.Fragment>
+                                ))}
+                              </tr>
+                            ))}
+                            <tr>
+                              <td colSpan={2} style={{ border: '1px solid #000', padding: '3px 4px', fontSize: '8.5px' }}>
+                                Autre : <span style={{ textDecoration: 'underline' }}>{permitFormData.hauteurAutre || permitFormData.levageAutre || ''}</span>
+                              </td>
+                              {[1, 2, 3, 4].map(i => (
+                                <React.Fragment key={i}>
+                                  <td style={{ border: '1px solid #000', padding: '0', width: '22px' }}></td>
+                                  <td style={{ border: '1px solid #000', padding: '2px 4px', width: '17.5%' }}></td>
+                                </React.Fragment>
+                              ))}
+                            </tr>
+                            <tr style={{ background: '#f5f5f5' }}>
+                              <td colSpan={10} style={{ border: '1px solid #000', padding: '4px 6px', fontWeight: 'bold', fontSize: '9.5px' }}>Précautions générales</td>
+                            </tr>
+                            <tr>
+                              {['Extincteur', 'Moyen de communication', 'Balisage zone à risque', 'Validation PM ou Responsable site', 'TBT – Briefing avant de démarrer'].map((item, idx) => (
+                                <React.Fragment key={idx}>
+                                  <td style={{ border: '1px solid #000', padding: '3px', width: '22px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                      <div style={{ width: '12px', height: '12px', border: '1.5px solid #000', background: permitFormData.precautionsGenerales.includes(item) ? '#000' : 'none', color: '#fff', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: '1' }}>
+                                        {permitFormData.precautionsGenerales.includes(item) ? '✓' : ''}
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td style={{ border: '1px solid #000', padding: '3px 4px', width: '17.5%', fontSize: '8.5px', verticalAlign: 'middle', lineHeight: '1.1' }}>{item}</td>
+                                </React.Fragment>
+                              ))}
+                            </tr>
+                          </tbody>
+                        </table>
+
+                        {[
+                          { 
+                            title: 'TRAVAIL À CHAUD', 
+                            color: '#fee2e2', 
+                            show: permitFormData.typesTravaux.includes('Travail à chaud'), 
+                            all: [
+                              'Inspection avant démarrage travaux',
+                              'Mise en place de bâche ignifugée',
+                              'Surveillance en continue',
+                              'Moyen d’extinction disponible (2 extincteurs à poudre)',
+                              'Balisage de la zone de travail',
+                              'Coordination'
+                            ], 
+                            selected: permitFormData.chaudPrecautions,
+                            nature: ['Soudure', 'Meulage', 'Découpe', 'Brasage', 'Autre'],
+                            natureSelected: permitFormData.chaudNature,
+                            natureAutre: permitFormData.chaudNatureAutre
+                          },
+                          { 
+                            title: 'TRAVAUX ÉLECTRIQUES', 
+                            color: '#fef3c7', 
+                            show: permitFormData.typesTravaux.includes('Travaux électriques'), 
+                            all: [
+                              'Consignation des installations', 
+                              'Ensemble de l’installation hors tension', 
+                              'Zone d’exclusion balisée', 
+                              'Personnel intervenant sur les zones à risques formé et/ou certifié', 
+                              'TBT – Briefing avant de démarrer',
+                              'Autre'
+                            ], 
+                            selected: permitFormData.elecPrecautions,
+                            nature: ['Travaux BT', 'Travaux HT', 'Tension > 50V'],
+                            natureSelected: permitFormData.elecTypes,
+                            natureAutre: permitFormData.elecAutre
+                          },
+                          { 
+                            title: 'TRAVAIL EN HAUTEUR', 
+                            color: '#dcfce7', 
+                            show: permitFormData.typesTravaux.includes('Travail en hauteur'), 
+                            all: [
+                              'Accès et sortie sûrs et sécurisés',
+                              'La plate-forme, la scène ou l\'échafaudage sont montés et vérifiés comme étant sûrs pour le travail',
+                              'Des points d\'ancrage adéquats ont été localisés pour les longes et lignes de vie',
+                              'Mise en œuvre de mesures d\'atténuation des risques de chute (longes d\'outils, balisage des zones à risque..)',
+                              'Échafaudage / échelle approuvé (le cas échéant)',
+                              'Autre'
+                            ], 
+                            selected: permitFormData.hauteurPrecautions, 
+                            heightDetails: true,
+                            natureSelected: permitFormData.hauteurPrecautions.includes('Autre') ? [permitFormData.hauteurAutre] : [] 
+                          },
+                          { 
+                            title: 'LEVAGE', 
+                            color: '#dbeafe', 
+                            show: permitFormData.typesTravaux.includes('Levage'), 
+                            all: [
+                              'Approbation du plan de levage',
+                              'EPI adapté à l’opération',
+                              'Balisage de la zone de levage – pas de passage sous les charges',
+                              'L’ensemble du matériel est certifié',
+                              'Inspection préalable des engins à utiliser (Nacelle, grue...)',
+                              'Autre'
+                            ], 
+                            selected: permitFormData.levagePrecautions,
+                            natureSelected: permitFormData.levagePrecautions.includes('Autre') ? [permitFormData.levageAutre] : [] 
+                          },
+                          { 
+                            title: 'TRAVAUX DE FOUILLE', 
+                            color: '#f5f5f4', 
+                            show: permitFormData.typesTravaux.includes('Travaux de fouille'), 
+                            all: [
+                              'Vérification de la stabilité du sol',
+                              'Balisage de la zone de travail',
+                              'Organisation propre du chantier',
+                              'Inspection et repérage avant démarrage des travaux',
+                              'Vérification des réseaux souterrains',
+                              'Interdiction de passage non autorisé',
+                              'Autre'
+                            ], 
+                            selected: permitFormData.fouillePrecautions,
+                            natureSelected: permitFormData.fouillePrecautions.includes('Autre') ? [permitFormData.fouilleAutre] : [] 
+                          },
+                          { 
+                            title: 'MANUTENTION', 
+                            color: '#ccfbf1', 
+                            show: permitFormData.typesTravaux.includes('Travaux de manutention'), 
+                            all: [
+                              'Sécurisation de la charge avant toute manipulation',
+                              'Respect de la charge réglementaire',
+                              'Travail en binôme',
+                              'Supervision tout au long de l’opération',
+                              'Coordination',
+                              'Autre'
+                            ], 
+                            selected: permitFormData.manutentionPrecautions,
+                            natureSelected: permitFormData.manutentionPrecautions.includes('Autre') ? [permitFormData.manutentionAutre] : [] 
+                          },
+                          { 
+                            title: 'BATTAGE', 
+                            color: '#ffe4e6', 
+                            show: permitFormData.typesTravaux.includes('Travaux de battage'), 
+                            all: [
+                              'Repérage préalable',
+                              'Limitation de puissance',
+                              'Surveillance en continu de l’opération',
+                              'Balisage de la zone de travail et de la zone de sécurité',
+                              'Utilisation des plaques d’appui au sol',
+                              'Rotation du personnel',
+                              'Vérification du sol avant travaux',
+                              'Autre'
+                            ], 
+                            selected: permitFormData.battagePrecautions,
+                            natureSelected: permitFormData.battagePrecautions.includes('Autre') ? [permitFormData.battageAutre] : [] 
+                          },
+                          { 
+                            title: 'CO-ACTIVITÉ SIMOPS', 
+                            color: '#ede9fe', 
+                            show: permitFormData.typesTravaux.includes('Co-activité SIMOPS'), 
+                            all: [
+                              'Nomination d’un coordinateur bien identifié sur site ayant autorité',
+                              'Mise en place d’un plan B en cas d’interférence augmentant le risque',
+                              'TBT – pré briefing en présence des 2 équipes',
+                              'Autre'
+                            ], 
+                            selected: permitFormData.simopsPrecautions,
+                            description: permitFormData.simopsDescription,
+                            natureSelected: permitFormData.simopsPrecautions.includes('Autre') ? [permitFormData.simopsAutre] : [] 
+                          }
+                        ].filter(s => s.show).map((sec, idx) => {
+                          if (sec.title === 'TRAVAIL EN HAUTEUR') {
+                            return (
+                              <table key={idx} style={{ width: '100%', borderCollapse: 'collapse', fontSize: '8.5px', marginBottom: '6px' }}>
+                                <tbody>
+                                  <tr style={{ background: sec.color }}>
+                                    <td colSpan={8} style={{ border: '1px solid #000', padding: '4px 6px', fontWeight: 'bold', fontSize: '9px' }}>TRAVAIL EN HAUTEUR</td>
+                                  </tr>
+                                  <tr>
+                                    <td colSpan={8} style={{ border: '1px solid #000', padding: '4px 6px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                                        <span style={{ fontSize: '8px' }}>Hauteur de chute potentielle :</span>
+                                        {['<3m', '3 à 8 m', '8 à 40 m', '>40m'].map(h => (
+                                          <div key={h} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <div style={{ width: '10px', height: '10px', border: '1.2px solid #000', background: permitFormData.hauteurChute === h ? '#000' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '7px', fontWeight: 'bold' }}>{permitFormData.hauteurChute === h ? '✓' : ''}</div>
+                                            <span style={{ fontSize: '8px' }}>{h}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                                        <span style={{ fontSize: '8px' }}>Travail en toiture :</span>
+                                        {['Oui', 'Non'].map(o => (
+                                          <div key={o} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <div style={{ width: '10px', height: '10px', border: '1.2px solid #000', background: (permitFormData.hauteurToiture || 'Non') === o ? '#000' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '7px', fontWeight: 'bold' }}>{(permitFormData.hauteurToiture || 'Non') === o ? '✓' : ''}</div>
+                                            <span style={{ fontSize: '8px' }}>{o}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        {['Toit plat', 'Légère inclinaison', 'Forte inclinaison'].map(t => (
+                                          <div key={t} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <div style={{ width: '10px', height: '10px', border: '1.2px solid #000', background: permitFormData.hauteurToitType === t ? '#000' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '7px', fontWeight: 'bold' }}>{permitFormData.hauteurToitType === t ? '✓' : ''}</div>
+                                            <span style={{ fontSize: '8px' }}>{t}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  <tr>
+                                    <td style={{ border: '1px solid #000', width: '22px', textAlign: 'center', padding: '3px' }}>
+                                      <div style={{ width: '10px', height: '10px', border: '1.2px solid #000', background: sec.selected.includes(sec.all[0]) ? '#000' : 'none', margin: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '8px', fontWeight: 'bold' }}>{sec.selected.includes(sec.all[0]) ? '✓' : ''}</div>
+                                    </td>
+                                    <td style={{ border: '1px solid #000', padding: '3px 4px', width: '23%', fontSize: '8px', lineHeight: '1.1' }}>{sec.all[0]}</td>
+                                    
+                                    <td style={{ border: '1px solid #000', width: '22px', textAlign: 'center', padding: '3px' }}>
+                                      <div style={{ width: '10px', height: '10px', border: '1.2px solid #000', background: sec.selected.includes(sec.all[1]) ? '#000' : 'none', margin: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '8px', fontWeight: 'bold' }}>{sec.selected.includes(sec.all[1]) ? '✓' : ''}</div>
+                                    </td>
+                                    <td style={{ border: '1px solid #000', padding: '3px 4px', width: '23%', fontSize: '8px', lineHeight: '1.1' }}>{sec.all[1]}</td>
+
+                                    <td rowSpan={2} style={{ border: '1px solid #000', width: '22px', textAlign: 'center', padding: '3px' }}>
+                                      <div style={{ width: '10px', height: '10px', border: '1.2px solid #000', background: sec.selected.includes(sec.all[2]) ? '#000' : 'none', margin: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '8px', fontWeight: 'bold' }}>{sec.selected.includes(sec.all[2]) ? '✓' : ''}</div>
+                                    </td>
+                                    <td rowSpan={2} style={{ border: '1px solid #000', padding: '3px 4px', width: '23%', fontSize: '8px', lineHeight: '1.1' }}>{sec.all[2]}</td>
+
+                                    <td rowSpan={2} style={{ border: '1px solid #000', width: '22px', textAlign: 'center', padding: '3px' }}>
+                                      <div style={{ width: '10px', height: '10px', border: '1.2px solid #000', background: sec.selected.includes('Autre') ? '#000' : 'none', margin: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '8px', fontWeight: 'bold' }}>{sec.selected.includes('Autre') ? '✓' : ''}</div>
+                                    </td>
+                                    <td rowSpan={2} style={{ border: '1px solid #000', padding: '3px 4px', width: '23%', fontSize: '8px', lineHeight: '1.1' }}>Autre: {permitFormData.hauteurAutre}</td>
+                                  </tr>
+                                  <tr>
+                                    <td style={{ border: '1px solid #000', width: '22px', textAlign: 'center', padding: '3px' }}>
+                                      <div style={{ width: '10px', height: '10px', border: '1.2px solid #000', background: sec.selected.includes(sec.all[3]) ? '#000' : 'none', margin: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '8px', fontWeight: 'bold' }}>{sec.selected.includes(sec.all[3]) ? '✓' : ''}</div>
+                                    </td>
+                                    <td style={{ border: '1px solid #000', padding: '3px 4px', fontSize: '8px', lineHeight: '1.1' }}>{sec.all[3]}</td>
+                                    
+                                    <td style={{ border: '1px solid #000', width: '22px', textAlign: 'center', padding: '3px' }}>
+                                      <div style={{ width: '10px', height: '10px', border: '1.2px solid #000', background: sec.selected.includes(sec.all[4]) ? '#000' : 'none', margin: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '8px', fontWeight: 'bold' }}>{sec.selected.includes(sec.all[4]) ? '✓' : ''}</div>
+                                    </td>
+                                    <td style={{ border: '1px solid #000', padding: '3px 4px', fontSize: '8px', lineHeight: '1.1' }}>{sec.all[4]}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            );
+                          }
+                          return (
+                            <table key={idx} style={{ width: '100%', borderCollapse: 'collapse', fontSize: '8.5px', marginBottom: '6px' }}>
+                              <tbody>
+                                <tr style={{ background: sec.color }}>
+                                  <td style={{ border: '1px solid #000', padding: '4px 6px', fontWeight: 'bold', fontSize: '9px' }}>{sec.title}</td>
+                                </tr>
+                                {sec.nature && (
+                                  <tr>
+                                    <td style={{ border: '1px solid #000', padding: '4px 6px' }}>
+                                      <div style={{ fontWeight: 'bold', fontSize: '8px', marginBottom: '3px', color: '#555' }}>NATURE DES TRAVAUX :</div>
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px' }}>
+                                        {sec.nature.map(n => (
+                                          <div key={n} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <div style={{ width: '10px', height: '10px', border: '1.2px solid #000', flexShrink: 0, background: sec.natureSelected.includes(n) ? '#000' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '8px', fontWeight: 'bold' }}>{sec.natureSelected.includes(n) ? '✓' : ''}</div>
+                                            <span style={{ fontSize: '8px' }}>{n === 'Autre' && sec.natureAutre ? `Autre: ${sec.natureAutre}` : n}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                                {sec.description && (
+                                  <tr>
+                                    <td style={{ border: '1px solid #000', padding: '4px 6px' }}>
+                                      <div style={{ fontWeight: 'bold', fontSize: '8px', marginBottom: '3px', color: '#555' }}>DESCRIPTION DES CO-ACTIVITÉS :</div>
+                                      <div style={{ fontSize: '8px', whiteSpace: 'pre-wrap', minHeight: '30px' }}>{sec.description}</div>
+                                    </td>
+                                  </tr>
+                                )}
+                                {sec.all.length > 0 && (
+                                  <tr>
+                                    <td style={{ border: '1px solid #000', padding: '4px 6px' }}>
+                                      <div style={{ fontWeight: 'bold', fontSize: '8px', marginBottom: '3px', color: '#555' }}>MESURES DE PRÉVENTION :</div>
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+                                        {sec.all.map(p => (
+                                          <div key={p} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <div style={{ width: '10px', height: '10px', border: '1.2px solid #000', flexShrink: 0, background: sec.selected.includes(p) ? '#000' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '8px', fontWeight: 'bold' }}>{sec.selected.includes(p) ? '✓' : ''}</div>
+                                            <span style={{ fontSize: '8px' }}>{p}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          );
+                        })}
+
+                        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '12px' }}>
+                          <tbody>
+                            <tr style={{ background: '#f0f0f0' }}>
+                              <td colSpan={3} style={{ border: '1px solid #555', padding: '6px 8px', fontWeight: 'bold', fontSize: '9.5px' }}>VISA FINAL</td>
+                            </tr>
+                            <tr style={{ textAlign: 'center' }}>
+                              <td style={{ border: '1px solid #555', padding: '10px', width: '33.33%', verticalAlign: 'top' }}>
+                                <div style={{ fontWeight: 'bold', fontSize: '9px' }}>Rempli par</div>
+                                <div style={{ fontSize: '8px', fontStyle: 'italic', marginBottom: '5px' }}>Nom / Signature</div>
+                                <div style={{ fontWeight: 'bold', fontSize: '8.5px', marginTop: '2px' }}>{permitFormData.rempliPar}</div>
+                                <div style={{ height: '35px' }}></div>
+                              </td>
+                              <td style={{ border: '1px solid #555', padding: '10px', width: '33.33%', verticalAlign: 'top' }}>
+                                <div style={{ fontWeight: 'bold', fontSize: '9px' }}>Superviseur</div>
+                                <div style={{ fontSize: '8px', fontStyle: 'italic', marginBottom: '5px' }}>Nom / Signature</div>
+                                <div style={{ fontWeight: 'bold', fontSize: '8.5px', marginTop: '2px' }}>{permitFormData.responsable}</div>
+                                {(() => { const emp = employees.find(e => e.name === permitFormData.responsable); return emp?.signature ? <img src={emp.signature} alt="sig" style={{ maxHeight: '35px', maxWidth: '110px', objectFit: 'contain', display: 'block', margin: '4px auto 0' }} /> : <div style={{ height: '35px' }}></div>; })()}
+                              </td>
+                              <td style={{ border: '1px solid #555', padding: '10px', width: '33.33%', verticalAlign: 'top' }}>
+                                <div style={{ fontWeight: 'bold', fontSize: '9px' }}>Validation HSE / OPS</div>
+                                <div style={{ fontSize: '8px', fontStyle: 'italic', marginBottom: '5px' }}>Nom / Signature</div>
+                                <div style={{ fontWeight: 'bold', fontSize: '8.5px', marginTop: '2px' }}>{permitFormData.validationHSE}</div>
+                                <div style={{ height: '35px' }}></div>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td colSpan={3} style={{ border: '1px solid #555', padding: '6px 8px', fontSize: '9px' }}>
+                                <span style={{ fontStyle: 'italic' }}>En cas d'annulation du job, merci d'en préciser la raison :</span>
+                                <span style={{ marginLeft: '12px', fontWeight: 'bold', borderBottom: '1px solid #ccc', padding: '0 12px' }}>{permitFormData.annulationRaison}</span>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div style={{ marginTop: '20px', fontSize: '7.5px', color: '#999', textAlign: 'center', borderTop: '1px solid #eee', paddingTop: '6px' }}>
+                        MADAGREEN POWER — www.madagreen-power.com — MGP-FRM-01.e.003-ver.01
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1735,8 +2728,16 @@ function App() {
                         const page1 = document.getElementById('sb-page-1');
                         const page2 = document.getElementById('sb-page-2');
 
-                        const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true, logging: false });
-                        const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true, logging: false });
+                        // Wait for all images to fully load before capture
+                        const waitForImages = (el) => {
+                          const imgs = Array.from(el.querySelectorAll('img'));
+                          return Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(resolve => { img.onload = resolve; img.onerror = resolve; })));
+                        };
+                        await Promise.all([waitForImages(page1), waitForImages(page2)]);
+
+                        const captureOptions = { scale: 2, useCORS: true, allowTaint: true, logging: false, imageTimeout: 5000, backgroundColor: '#ffffff' };
+                        const canvas1 = await html2canvas(page1, captureOptions);
+                        const canvas2 = await html2canvas(page2, captureOptions);
 
                         const pdf = new jsPDF('p', 'mm', 'a4');
                         const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -1809,8 +2810,13 @@ function App() {
                             <tr key={idx}>
                               <td style={{ border: '1px solid #333', padding: '8px', fontSize: '11px' }}>{intv.role}</td>
                               <td style={{ border: '1px solid #333', padding: '8px', fontSize: '11px', fontWeight: 'bold' }}>{intv.name}</td>
-                              <td style={{ border: '1px solid #333', padding: '4px', height: '40px', textAlign: 'center' }}>
-                                {(() => { const emp = employees.find(e => e.name === intv.name); return emp?.signature ? <img src={emp.signature} alt="sig" style={{ maxHeight: '36px', maxWidth: '120px', objectFit: 'contain' }} /> : null; })()}
+                              <td style={{ border: '1px solid #333', padding: '4px', height: '50px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                {(() => {
+                                  const emp = employees.find(e => e.name === intv.name);
+                                  return emp?.signature
+                                    ? <img src={emp.signature} alt="Signature" style={{ maxHeight: '45px', maxWidth: '150px', objectFit: 'contain', display: 'block', margin: '0 auto' }} />
+                                    : null;
+                                })()}
                               </td>
                             </tr>
                           ))}
