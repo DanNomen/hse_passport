@@ -80,6 +80,64 @@ const calculateProjectDuration = (startDate) => {
   return `${diffDays} jour${diffDays > 1 ? 's' : ''}`;
 };
 
+
+// --- Sub-components (Top-level for performance) ---
+const StatCard = ({ label, value, color, icon }) => (
+  <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '160px' }}>
+    <div style={{ position: 'absolute', top: '-15px', right: '-15px', fontSize: '4rem', opacity: 0.03, transform: 'rotate(15deg)' }}>{icon}</div>
+    <div style={{ fontSize: '2.5rem', fontWeight: '900', color: `var(--${color})`, marginBottom: '0.25rem', fontFamily: 'var(--font-heading)', lineHeight: 1.1 }}>{value}</div>
+    <div className="input-label" style={{ marginBottom: 0, fontSize: '0.65rem', letterSpacing: '1px', opacity: 0.8 }}>{label}</div>
+  </div>
+)
+
+const EmployeeRaw = ({ emp, onSelect, onEdit, onDelete, isAdmin }) => (
+  <div
+    className="glass-card employee-row animate-slide-up"
+    onClick={() => onSelect(emp)}
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '1rem 1.5rem',
+      background: 'var(--bg-card)',
+      cursor: 'pointer',
+      marginBottom: '0.75rem',
+      borderLeft: `4px solid ${emp.compliance >= 90 ? 'var(--accent)' : emp.compliance >= 60 ? 'var(--warning)' : 'var(--danger)'}`,
+      transition: 'all 0.3s'
+    }}
+  >
+    <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+      <div style={{ width: '50px', height: '50px', borderRadius: '12px', background: 'linear-gradient(135deg, var(--primary), var(--accent))', padding: '2px', position: 'relative', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
+        <img src={emp.avatar || avatarPlaceholder} style={{ width: '100%', height: '100%', borderRadius: '10px', objectFit: 'cover', border: '2px solid var(--bg-main)' }} alt="Avatar" />
+        <div style={{ position: 'absolute', bottom: '-2px', right: '-2px', width: '10px', height: '10px', borderRadius: '50%', background: emp.compliance >= 90 ? 'var(--accent)' : 'var(--danger)', border: '2px solid var(--bg-main)' }}></div>
+      </div>
+      <div>
+        <div style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--text-primary)', marginBottom: '0.1rem', letterSpacing: '-0.02em' }}>{emp.lastName?.toUpperCase()} {emp.firstName}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: '600' }}>{emp.role}</span>
+          <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: 'var(--text-muted)' }}></span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-heading)' }}>{emp.matricule}</span>
+        </div>
+      </div>
+    </div>
+
+    <div style={{ display: 'flex', alignItems: 'center', gap: '2.5rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+        <div style={{ fontWeight: '900', fontSize: '1.25rem', color: emp.compliance >= 90 ? 'var(--accent)' : emp.compliance >= 60 ? 'var(--warning)' : 'var(--danger)', lineHeight: 1 }}>{emp.compliance}%</div>
+        <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '1px', fontWeight: '800', marginTop: '0.2rem' }}>Conformité</div>
+      </div>
+      <div style={{ display: 'flex', gap: '0.5rem' }}>
+        {isAdmin && (
+          <>
+            <button className="btn-icon btn-edit-special" style={{ fontSize: '0.9rem' }} onClick={(e) => { e.stopPropagation(); onEdit(emp); }} title="Modifier">✎</button>
+            <button className="btn-icon btn-delete-special" style={{ fontSize: '0.9rem' }} onClick={(e) => { e.stopPropagation(); onDelete(emp); }} title="Supprimer">🗑</button>
+          </>
+        )}
+      </div>
+    </div>
+  </div>
+)
+
 function App() {
   const isProd = true // Activé pour la collaboration
   const API_URL = 'http://46.105.75.234:3009/api'.trim()
@@ -366,7 +424,7 @@ function App() {
   }, [isProd, isAuthenticated, isOnline, isSyncing])
 
   // --- API Service (Robustness & Fallback) ---
-  const apiCall = async (method, endpoint, data = null) => {
+  const apiCall = React.useCallback(async (method, endpoint, data = null) => {
     const url = `${API_URL}${endpoint}`
     const options = {
       url,
@@ -400,7 +458,7 @@ function App() {
         throw new Error("Impossible de joindre le serveur. Vérifiez votre connexion ou l'état du serveur.")
       }
     }
-  }
+  }, [API_URL]);
 
   const syncData = async () => {
     if (!isOnline) {
@@ -737,62 +795,9 @@ function App() {
     }
   }
 
-  // --- Sub-components ---
-  const StatCard = ({ label, value, color }) => (
-    <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '160px' }}>
-      <div style={{ position: 'absolute', top: '-15px', right: '-15px', fontSize: '4rem', opacity: 0.03, transform: 'rotate(15deg)' }}>📊</div>
-      <div style={{ fontSize: '2.5rem', fontWeight: '900', color: `var(--${color})`, marginBottom: '0.25rem', fontFamily: 'var(--font-heading)', lineHeight: 1.1 }}>{value}</div>
-      <div className="input-label" style={{ marginBottom: 0, fontSize: '0.65rem', letterSpacing: '1px', opacity: 0.8 }}>{label}</div>
-    </div>
-  )
 
-  const EmployeeRaw = ({ emp }) => (
-    <div
-      className="glass-card employee-row animate-slide-up"
-      onClick={() => { setSelectedEmployee(emp); setEmployeeView('badge') }}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '1rem 1.5rem',
-        background: 'var(--bg-card)',
-        cursor: 'pointer',
-        marginBottom: '0.75rem',
-        borderLeft: `4px solid ${emp.compliance >= 90 ? 'var(--accent)' : emp.compliance >= 60 ? 'var(--warning)' : 'var(--danger)'}`,
-        transition: 'var(--transition)'
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-        <div style={{ width: '50px', height: '50px', borderRadius: '12px', background: 'linear-gradient(135deg, var(--primary), var(--accent))', padding: '2px', position: 'relative', boxShadow: 'var(--shadow-sm)' }}>
-          <img src={emp.avatar || avatarPlaceholder} style={{ width: '100%', height: '100%', borderRadius: '10px', objectFit: 'cover', border: '2px solid var(--bg-main)' }} alt="Avatar" />
-          <div style={{ position: 'absolute', bottom: '-2px', right: '-2px', width: '10px', height: '10px', borderRadius: '50%', background: emp.compliance >= 90 ? 'var(--accent)' : 'var(--danger)', border: '2px solid var(--bg-main)' }}></div>
-        </div>
-        <div>
-          <div style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--text-primary)', marginBottom: '0.1rem', letterSpacing: '-0.02em' }}>{emp.lastName?.toUpperCase()} {emp.firstName}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: '600' }}>{emp.role}</span>
-            <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: 'var(--text-muted)' }}></span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-heading)' }}>{emp.matricule}</span>
-          </div>
-        </div>
-      </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '2.5rem' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-          <div style={{ fontWeight: '900', fontSize: '1.25rem', color: emp.compliance >= 90 ? 'var(--accent)' : emp.compliance >= 60 ? 'var(--warning)' : 'var(--danger)', lineHeight: 1 }}>{emp.compliance}%</div>
-          <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '1px', fontWeight: '800', marginTop: '0.2rem' }}>Conformité</div>
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
-            <>
-              <button className="btn-icon" style={{ width: '32px', height: '32px', fontSize: '0.9rem' }} onClick={(e) => { e.stopPropagation(); startEdit(emp); }} title="Modifier">✎</button>
-              <button className="btn-icon" style={{ width: '32px', height: '32px', fontSize: '0.9rem', color: 'var(--danger)' }} onClick={(e) => { e.stopPropagation(); handleDelete(emp); }} title="Supprimer">🗑</button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  )
+
 
   // --- Render ---
   return (
@@ -804,14 +809,14 @@ function App() {
 
         <div className="nav-actions">
           {isProd && (
-            <div className="badge badge-success mobile-hide" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <span className="pulse" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)' }}></span>
+            <div className="status-badge mobile-hide">
+              <span className="status-dot"></span>
               PROD LIVE
             </div>
           )}
 
           <button className="btn-icon" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Changer de thème">
-            {theme === 'dark' ? '☀️' : '🌙'}
+            {theme === 'dark' ? '☀️' : '☁️'}
           </button>
 
           {isAuthenticated && (
@@ -823,20 +828,15 @@ function App() {
                     onClick={() => syncData()}
                     disabled={isSyncing}
                     style={{ color: isOnline ? 'var(--accent)' : 'var(--text-muted)' }}
-                    title="Synchroniser les données"
+                    title="Synchroniser"
                   >
-                    <span className={isSyncing ? 'animate-spin' : ''}>☁️</span>
+                    <span className={isSyncing ? 'animate-spin' : ''}>🔄</span>
                   </button>
 
-                  <div className="user-badge mobile-hide" style={{ background: 'var(--bg-card)', padding: '0.4rem 1rem', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-glass)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)' }}></div>
-                    <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>{currentUser?.role}</span>
-                  </div>
-
                   <div className="mobile-hide" style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }} onClick={() => setEmployeeView('list')}>Employés</button>
+                    <button className={`btn-pill ${employeeView === 'list' ? 'active' : ''}`} onClick={() => setEmployeeView('list')}>Employés</button>
                     {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
-                      <button className="btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }} onClick={() => setEmployeeView('settings')}>⚙️ Paramètres</button>
+                      <button className={`btn-pill ${employeeView === 'settings' ? 'active' : ''}`} onClick={() => setEmployeeView('settings')}>Paramètres</button>
                     )}
                   </div>
                   <div className="mobile-show">
@@ -854,22 +854,23 @@ function App() {
                     style={{ color: isOnline ? 'var(--info)' : 'var(--text-muted)' }}
                     title="Actualiser"
                   >
-                    <span className={isSyncing ? 'animate-spin' : ''}>☁️</span>
+                    <span className={isSyncing ? 'animate-spin' : ''}>🔄</span>
                   </button>
 
                   <div className="mobile-hide" style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', borderColor: projetView === 'projet' ? 'var(--info)' : '' }} onClick={() => setProjetView('projet')}>Projets</button>
+                    <button className={`btn-pill ${projetView === 'projet' ? 'active' : ''}`} onClick={() => setProjetView('projet')}>Projets</button>
                     {currentUser?.role === 'Super Admin' && (
-                      <button className="btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', borderColor: projetView === 'materiels' ? 'var(--info)' : '' }} onClick={() => setProjetView('materiels')}>Matériels</button>
+                      <button className={`btn-pill ${projetView === 'materiels' ? 'active' : ''}`} onClick={() => setProjetView('materiels')}>Matériels</button>
                     )}
                   </div>
+
                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                     {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
                       <div style={{ position: 'relative' }}>
-                        <button className="btn-icon" onClick={() => setShowNotifications(!showNotifications)} style={{ position: 'relative', border: showNotifications ? '1px solid var(--info)' : '' }}>
+                        <button className="btn-icon" onClick={() => setShowNotifications(!showNotifications)} style={{ position: 'relative' }}>
                           🔔
                           {notifications.filter(n => !n.read).length > 0 && (
-                            <span style={{ position: 'absolute', top: '-5px', right: '-5px', background: 'var(--danger)', color: 'white', borderRadius: '50%', width: '14px', height: '14px', fontSize: '0.55rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900' }}>
+                            <span className="notif-badge">
                               {notifications.filter(n => !n.read).length}
                             </span>
                           )}
@@ -908,14 +909,14 @@ function App() {
                 </>
               ) : null}
 
-              <button className="btn-primary" style={{ background: 'var(--danger)', boxShadow: 'none', padding: '0.5rem 1rem', fontSize: '0.85rem' }} onClick={() => {
+              <button className="btn-primary btn-delete-special" style={{ padding: '0.5rem 1.25rem', fontSize: '0.85rem', fontWeight: '800', borderRadius: '12px' }} onClick={() => {
                 setIsAuthenticated(false);
                 setCurrentUser(null);
                 setSelectedHub(null);
                 localStorage.removeItem('hse_isAuthenticated');
                 localStorage.removeItem('hse_currentUser');
                 localStorage.removeItem('hse_selectedHub');
-              }}>Quitter</button>
+              }}>Déconnexion</button>
             </div>
           )}
         </div>
@@ -954,9 +955,9 @@ function App() {
                 </p>
 
                 <div style={{ display: 'flex', gap: '4rem' }}>
-                  <div style={{ textAlign: 'center' }}><div style={{ fontSize: '1.8rem', marginBottom: '0.75rem' }}>🛡️</div><div style={{ fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Sécurité</div></div>
-                  <div style={{ textAlign: 'center' }}><div style={{ fontSize: '1.8rem', marginBottom: '0.75rem' }}>📋</div><div style={{ fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Dossiers</div></div>
-                  <div style={{ textAlign: 'center' }}><div style={{ fontSize: '1.8rem', marginBottom: '0.75rem' }}>🎫</div><div style={{ fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Passeports</div></div>
+                  <div style={{ textAlign: 'center' }}><div style={{ fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Sécurité</div></div>
+                  <div style={{ textAlign: 'center' }}><div style={{ fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Dossiers</div></div>
+                  <div style={{ textAlign: 'center' }}><div style={{ fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Passeports</div></div>
                 </div>
               </div>
             </div>
@@ -995,7 +996,7 @@ function App() {
                         style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', cursor: 'pointer', padding: '1.75rem', textAlign: 'left', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)' }}
                         onClick={() => { setSelectedHub('hse'); localStorage.setItem('hse_selectedHub', 'hse'); }}
                       >
-                        <div style={{ width: '55px', height: '55px', borderRadius: '16px', background: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.75rem' }}>🛡️</div>
+                        <div style={{ width: '55px', height: '55px', borderRadius: '16px', background: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>🛡️</div>
                         <div>
                           <div style={{ fontWeight: '800', fontSize: '1.2rem', color: 'var(--text-primary)' }}>HSE Passport</div>
                           <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>Habilitations & Sécurité</div>
@@ -1007,7 +1008,7 @@ function App() {
                         style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', cursor: 'pointer', padding: '1.75rem', textAlign: 'left', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)' }}
                         onClick={() => { setSelectedHub('projet'); localStorage.setItem('hse_selectedHub', 'projet'); }}
                       >
-                        <div style={{ width: '55px', height: '55px', borderRadius: '16px', background: 'var(--accent-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.75rem' }}>🏗️</div>
+                        <div style={{ width: '55px', height: '55px', borderRadius: '16px', background: 'var(--accent-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>🏗️</div>
                         <div>
                           <div style={{ fontWeight: '800', fontSize: '1.2rem', color: 'var(--text-primary)' }}>Gestion de Projet</div>
                           <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>Suivi Chantier & Logistique</div>
@@ -1022,10 +1023,10 @@ function App() {
                         onClick={() => setSelectedHub(null)}
                         style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontWeight: '700', cursor: 'pointer', fontSize: '0.85rem', marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'color 0.2s' }}
                       >
-                        ← Retour au Hub
+                        🔙 Retour au Hub
                       </button>
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.25rem', borderRadius: '12px', background: 'var(--accent-glow)', color: 'var(--accent)', fontSize: '0.75rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2rem' }}>
-                        <span>🛡️</span> Module {selectedHub === 'hse' ? 'HSE' : 'Projet'}
+                        Module {selectedHub === 'hse' ? 'HSE' : 'Projet'}
                       </div>
                       <h2 style={{ fontSize: '2.8rem', fontWeight: '900', margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>Connexion</h2>
                       <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginTop: '1rem' }}>Identifiez-vous pour accéder à vos outils.</p>
@@ -1041,15 +1042,11 @@ function App() {
                         <input type="password" name="password" className="glass-input" placeholder="••••••••" required style={{ background: 'var(--bg-input)' }} />
                       </div>
                       <button type="submit" className="btn-primary" style={{ marginTop: '1.5rem', width: '100%', height: '60px', fontSize: '1.1rem', borderRadius: '18px', fontWeight: '800' }}>
-                        Se connecter →
+                        Se connecter 🚀
                       </button>
                     </form>
                   </div>
                 )}
-
-                <div style={{ marginTop: '4rem', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', opacity: 0.7, fontWeight: '600' }}>
-                  © {new Date().getFullYear()} Madagreen Power — Portail de Gestion Intégrée
-                </div>
               </div>
             </div>
           </div>
@@ -1064,14 +1061,13 @@ function App() {
                       <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>Vue d'ensemble et gestion opérationnelle</p>
                     </div>
                     {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
-                      <button className="btn-primary" onClick={() => { setProjetView('addProjet'); setProjetWizardStep(1); }}>+ Nouveau Projet</button>
+                      <button className="btn-primary" onClick={() => { setProjetView('addProjet'); setProjetWizardStep(1); }}>➕ Nouveau Projet</button>
                     )}
                   </div>
                 </div>
 
                 {projets.length === 0 ? (
                   <div className="glass-panel" style={{ padding: '4rem', textAlign: 'center' }}>
-                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🏗️</div>
                     <p style={{ color: 'var(--text-muted)' }}>Aucun projet actif. Cliquez sur "Lancer un Projet" pour démarrer.</p>
                   </div>
                 ) : (
@@ -1080,11 +1076,11 @@ function App() {
                       <div key={i} className="glass-card" style={{ padding: '2rem', borderLeft: '4px solid var(--info)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                            <div style={{ width: '60px', height: '60px', borderRadius: '15px', background: 'var(--info-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>🏗️</div>
+                            <div style={{ width: '60px', height: '60px', borderRadius: '15px', background: 'var(--info-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', fontWeight: 'bold' }}>GP</div>
                             <div>
                               <h3 style={{ margin: 0, fontSize: '1.25rem' }}>{p.nomChantier}</h3>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.4rem' }}>
-                                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>📍 {p.lieu}</span>
+                                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Lieu: {p.lieu}</span>
                                 <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>Resp: {p.responsableChantier}</span>
                               </div>
                             </div>
@@ -1103,7 +1099,7 @@ function App() {
                             </div>
                             <div>
                               <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Durée</div>
-                              <div style={{ fontWeight: '800', fontSize: '0.9rem', color: 'var(--info)' }}>⏱ {calculateProjectDuration(p.dateDebut)}</div>
+                              <div style={{ fontWeight: '800', fontSize: '0.9rem', color: 'var(--info)' }}>{calculateProjectDuration(p.dateDebut)}</div>
                             </div>
                             <div>
                               <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Intervenants</div>
@@ -1127,7 +1123,7 @@ function App() {
                               setSelectedProjetIndex(i)
                               setProjetWizardStep(1)
                               setProjetView('editProjet')
-                            }}>✎</button>
+                            }}>📝</button>
                             <button className="btn-icon" style={{ color: 'var(--danger)' }} onClick={async () => {
                               if (!isOnline) { showToast("Connexion internet requise", "danger"); return; }
                               try {
@@ -1139,7 +1135,7 @@ function App() {
                                   showToast('Projet supprimé');
                                 } else { showToast("Erreur lors de la suppression", "danger"); }
                               } catch (e) { showToast(e.message, "danger"); }
-                            }}>🗑</button>
+                            }}>🗑️</button>
                           </div>
                         </div>
                       </div>
@@ -1154,7 +1150,7 @@ function App() {
                   <button className="btn-icon" onClick={() => {
                     if (projetWizardStep > 1) setProjetWizardStep(projetWizardStep - 1);
                     else { setProjetView('projet'); resetProjetForm(); setProjetIntervenants([]); }
-                  }}>←</button>
+                  }}>🔙</button>
                   <h2 style={{ margin: 0 }}>Nouveau Projet</h2>
                 </div>
 
@@ -1288,13 +1284,13 @@ function App() {
                     <button className="btn-primary" onClick={() => {
                       setCaisseFormData({ numeroCaisse: '', affecterA: '', materiels: [] });
                       setProjetView('addCaisse');
-                    }}>+ Nouvelle Caisse</button>
+                    }}>➕ Nouvelle Caisse</button>
                   </div>
                 </div>
 
                 {caisses.length === 0 ? (
                   <div className="glass-panel" style={{ padding: '4rem', textAlign: 'center' }}>
-                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📦</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--primary)', marginBottom: '1rem' }}>CAISSE</div>
                     <p style={{ color: 'var(--text-muted)' }}>Aucun matériel inventorié.</p>
                   </div>
                 ) : (
@@ -1313,11 +1309,11 @@ function App() {
                                 showToast('Caisse supprimée');
                               } else { showToast("Échec de la suppression", "danger"); }
                             } catch (e) { showToast(e.message, "danger"); }
-                          }}>🗑</button>
+                          }}>🗑️</button>
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem' }}>
-                          <div style={{ width: '50px', height: '50px', background: 'var(--info-glow)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>📦</div>
+                          <div style={{ width: '50px', height: '50px', background: 'var(--info-glow)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 'bold' }}>CAISSE</div>
                           <div>
                             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Numéro Inventaire</div>
                             <div style={{ fontWeight: '900', fontSize: '1.2rem', color: 'var(--info)' }}>{c.numeroCaisse}</div>
@@ -1326,7 +1322,7 @@ function App() {
 
                         <div className="glass-card" style={{ background: 'var(--bg-main)', padding: '1rem', marginBottom: '1.5rem' }}>
                           <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Responsable Affecté</div>
-                          <div style={{ fontWeight: '700', fontSize: '1rem' }}>👤 {c.affecterA || 'Non assigné'}</div>
+                          <div style={{ fontWeight: '700', fontSize: '1rem' }}>Responsable: {c.affecterA || 'Non assigné'}</div>
                         </div>
 
                         <div style={{ marginBottom: '2rem' }}>
@@ -1352,8 +1348,8 @@ function App() {
             {projetView === 'addCaisse' && (
               <div className="glass-panel animate-slide-up" style={{ maxWidth: '600px', margin: '0 auto', padding: '3rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem' }}>
-                  <button className="btn-icon" onClick={() => setProjetView('materiels')}>←</button>
-                  <h2>Nouveau Caisse</h2>
+                  <button className="btn-icon" onClick={() => setProjetView('materiels')}>🔙</button>
+                  <h2>Nouvelle Caisse</h2>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -1398,14 +1394,14 @@ function App() {
                           setCaisseFormData({ ...caisseFormData, materiels: [...caisseFormData.materiels, newMateriel.trim()] });
                           setNewMateriel('');
                         }
-                      }}>Add</button>
+                      }}>➕ Ajouter</button>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto' }}>
                       {caisseFormData.materiels.map((m, idx) => (
                         <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg-light)', padding: '0.6rem 1rem', borderRadius: '8px' }}>
                           <span>{m}</span>
-                          <button style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }} onClick={() => setCaisseFormData({ ...caisseFormData, materiels: caisseFormData.materiels.filter((_, i) => i !== idx) })}>✕</button>
+                          <button style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }} onClick={() => setCaisseFormData({ ...caisseFormData, materiels: caisseFormData.materiels.filter((_, i) => i !== idx) })}>❌</button>
                         </div>
                       ))}
                     </div>
@@ -1453,7 +1449,7 @@ function App() {
                     } else {
                       setProjetView('materiels');
                     }
-                  }}>←</button>
+                  }}>🔙</button>
                   <h2>Détails de la Caisse</h2>
                 </div>
 
@@ -1500,7 +1496,7 @@ function App() {
               <div className="glass-panel animate-slide-up" style={{ width: '100%', minHeight: '85vh', padding: '3rem', boxSizing: 'border-box' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1.5rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                    <button className="btn-icon" onClick={() => setProjetView('projet')}>←</button>
+                    <button className="btn-icon" onClick={() => setProjetView('projet')}>🔙</button>
                     <h2 style={{ margin: 0, fontSize: '1.8rem' }}>Détails du Projet</h2>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
@@ -1568,11 +1564,11 @@ function App() {
                       </div>
                       <div>
                         <label className="input-label">Lieu</label>
-                        <div style={{ fontWeight: '600', fontSize: '1.1rem' }}>📍 {projetFormData.lieu}</div>
+                        <div style={{ fontWeight: '600', fontSize: '1.1rem' }}>Lieu: {projetFormData.lieu}</div>
                       </div>
                       <div>
                         <label className="input-label">Date de début</label>
-                        <div style={{ fontWeight: '600', fontSize: '1.1rem' }}>📅 {projetFormData.dateDebut}</div>
+                        <div style={{ fontWeight: '600', fontSize: '1.1rem' }}>Date: {projetFormData.dateDebut}</div>
                       </div>
                       <div style={{ gridColumn: 'span 2', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
                         <label className="input-label">Durée du chantier</label>
@@ -1587,7 +1583,7 @@ function App() {
                     <div>
                       <label className="input-label" style={{ fontSize: '1.1rem' }}>Caisse d'outillage</label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', background: 'var(--card-bg-light)', padding: '1.5rem', borderRadius: '12px', marginTop: '0.5rem', border: '1px solid var(--border-glass)' }}>
-                        <div style={{ fontSize: '2.5rem' }}>📦</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>CAISSE</div>
                         <div>
                           {projetFormData.outillageCaisse ? (
                             <div
@@ -1631,7 +1627,7 @@ function App() {
                           const isSet = projetFormData.epc?.[key];
                           return (
                             <div key={key} style={{ padding: '0.8rem 1rem', borderRadius: '10px', background: 'var(--accent-glow)', border: '1px solid var(--accent)', opacity: 1, display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.9rem', transition: 'all 0.3s' }}>
-                              <span style={{ fontSize: '1.2rem' }}>✅</span>
+                              <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--accent)' }}>[OK]</span>
                               <span style={{ fontWeight: 'bold', color: '#fff' }}>{label}</span>
                             </div>
                           );
@@ -1660,17 +1656,17 @@ function App() {
                           setBriefingFormData(newBriefing);
                           setSelectedBriefingIndex(null);
                           setProjetView('editBriefing');
-                        }}>+ Nouveau Briefing</button>
+                        }}>➕ Nouveau Briefing</button>
                       </div>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '350px', overflowY: 'auto', paddingRight: '10px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '350px', overflowY: 'auto', paddingRight: '10px', marginBottom: '2rem' }}>
                         {projetFormData.briefings?.map((b, idx) => (
-                          <div key={b.id || idx} style={{ padding: '1.25rem', background: 'var(--bg-main)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-glass)', borderRadius: '12px', transition: 'transform 0.2s', ':hover': { transform: 'translateY(-2px)' } }}>
+                          <div key={b.id || idx} style={{ padding: '1.25rem', background: 'var(--bg-main)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-glass)', borderRadius: '12px' }}>
                             <div>
                               <div style={{ fontWeight: '800', fontSize: '1.05rem', color: '#fff', marginBottom: '0.4rem' }}>{b.topic}</div>
                               <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', display: 'flex', gap: '1rem' }}>
-                                <span>📅 {b.date}</span>
-                                <span>👤 {b.responsable}</span>
+                                <span>{b.date}</span>
+                                <span>{b.responsable}</span>
                               </div>
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -1678,29 +1674,95 @@ function App() {
                                 setBriefingFormData({ ...b });
                                 setSelectedBriefingIndex(idx);
                                 setProjetView('editBriefing');
-                              }}>✎</button>
+                              }}>📝</button>
                               <button className="btn-icon" style={{ width: '36px', height: '36px', fontSize: '0.9rem', background: 'rgba(255,0,0,0.1)', color: 'var(--danger)' }} onClick={() => {
                                 const updatedBriefings = projetFormData.briefings.filter((_, i) => i !== idx);
-                                const updatedProj = {
-                                  ...projetFormData,
-                                  intervenants: projetIntervenants,
-                                  dateCreation: projets[selectedProjetIndex]?.dateCreation || new Date().toLocaleDateString('fr-FR'),
-                                  briefings: updatedBriefings
-                                };
+                                const updatedProj = { ...projetFormData, briefings: updatedBriefings };
                                 const newList = [...projets];
                                 newList[selectedProjetIndex] = updatedProj;
                                 setProjets(newList);
                                 apiCall('POST', '/projets', updatedProj);
                                 setProjetFormData(updatedProj);
                                 showToast("Briefing supprimé");
-                              }}>🗑</button>
+                              }}>🗑️</button>
                             </div>
                           </div>
                         ))}
                         {(!projetFormData.briefings || projetFormData.briefings.length === 0) && (
-                          <div style={{ color: 'var(--text-dim)', fontSize: '0.95rem', textAlign: 'center', padding: '3rem 1rem', background: 'var(--card-bg-light)', borderRadius: '12px', border: '1px dashed var(--border-glass)' }}>
-                            <div style={{ fontSize: '2rem', marginBottom: '1rem', opacity: 0.5 }}>📝</div>
-                            Aucun briefing sécurité n'a encore été enregistré pour ce projet.
+                          <div style={{ color: 'var(--text-dim)', fontSize: '0.95rem', textAlign: 'center', padding: '2rem 1rem', background: 'var(--card-bg-light)', borderRadius: '12px', border: '1px dashed var(--border-glass)' }}>
+                            Aucun briefing sécurité enregistré.
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem' }}>
+                        <label className="input-label" style={{ margin: 0, fontSize: '1.1rem' }}>Permis de Travail ({projetFormData.permits?.length || 0})</label>
+                        <button className="btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', background: 'linear-gradient(135deg, #f59e0b, #d97706)' }} onClick={() => {
+                          setPermitFormData({
+                            id: Date.now().toString(),
+                            date: new Date().toISOString().split('T')[0],
+                            heureDebut: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+                            dateFinValidite: new Date().toISOString().split('T')[0],
+                            heureFinValidite: '17:00',
+                            status: 'Brouillon',
+                            lieuExact: projetFormData.lieu,
+                            piecesJointes: '', descriptionOperation: '', typesTravaux: [], autreType: '',
+                            mesuresPrevention: [], materielSecours: '',
+                            responsable: projetFormData.responsableChantier,
+                            personnelsConcernes: [
+                              ...(projetFormData.responsableChantier ? [projetFormData.responsableChantier] : []),
+                              ...projetIntervenants.filter(i => i.name !== projetFormData.responsableChantier).map(i => i.name)
+                            ],
+                            intervenants: [...projetIntervenants],
+                            episPermit: [], precautionsGenerales: [], elecTypes: [], elecPrecautions: [], elecAutre: '',
+                            hauteurChute: '', hauteurToiture: '', hauteurToitType: '', hauteurPrecautions: [], hauteurAutre: '',
+                            levagePrecautions: [], levageAutre: '', fouillePrecautions: [], fouilleAutre: '',
+                            battagePrecautions: [], battageAutre: '', simopsPrecautions: [], simopsDescription: '', simopsAutre: '',
+                            manutentionPrecautions: [], manutentionAutre: '', chaudNature: [], chaudNatureAutre: '', chaudPrecautions: [],
+                            informationsAdditionnelles: '', rempliPar: '', validationHSE: '', annulationRaison: '', visaResponsable: false, visaSecurite: false
+                          });
+                          setSelectedPermitIndex(null);
+                          setProjetView('permitTravail');
+                        }}>➕ Nouveau PWT</button>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '350px', overflowY: 'auto', paddingRight: '10px' }}>
+                        {projetFormData.permits?.map((p, idx) => (
+                          <div key={p.id || idx} style={{ padding: '1.25rem', background: 'var(--bg-main)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-glass)', borderRadius: '12px' }}>
+                            <div>
+                              <div style={{ fontWeight: '800', fontSize: '1.05rem', color: '#fff', marginBottom: '0.4rem' }}>PWT #{p.id.slice(-6)}</div>
+                              <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', display: 'flex', gap: '1rem' }}>
+                                <span>Date: {p.date}</span>
+                                <span style={{
+                                  color: p.status === 'Validé' ? '#10b981' : p.status === 'En attente' ? '#f59e0b' : '#94a3b8',
+                                  fontWeight: 'bold'
+                                }}>Statut: {p.status || 'Brouillon'}</span>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              <button className="btn-icon" style={{ width: '36px', height: '36px', fontSize: '0.9rem', background: 'rgba(255,255,255,0.05)' }} onClick={() => {
+                                setPermitFormData({ ...p });
+                                setSelectedPermitIndex(idx);
+                                setProjetView('permitTravail');
+                              }}>📝</button>
+                              <button className="btn-icon" style={{ width: '36px', height: '36px', fontSize: '0.9rem', background: 'rgba(255,0,0,0.1)', color: 'var(--danger)' }} onClick={() => {
+                                if (confirm("Supprimer ce permis ?")) {
+                                  const updatedPermits = projetFormData.permits.filter((_, i) => i !== idx);
+                                  const updatedProj = { ...projetFormData, permits: updatedPermits };
+                                  const newList = [...projets];
+                                  newList[selectedProjetIndex] = updatedProj;
+                                  setProjets(newList);
+                                  apiCall('POST', '/projets', updatedProj);
+                                  setProjetFormData(updatedProj);
+                                  showToast("Permis supprimé");
+                                }
+                              }}>🗑️</button>
+                            </div>
+                          </div>
+                        ))}
+                        {(!projetFormData.permits || projetFormData.permits.length === 0) && (
+                          <div style={{ color: 'var(--text-dim)', fontSize: '0.95rem', textAlign: 'center', padding: '2rem 1rem', background: 'var(--card-bg-light)', borderRadius: '12px', border: '1px dashed var(--border-glass)' }}>
+                            Aucun permis de travail enregistré.
                           </div>
                         )}
                       </div>
@@ -1710,7 +1772,7 @@ function App() {
                       <label className="input-label" style={{ fontSize: '1.1rem' }}>Équipe d'Intervenants ({projetIntervenants.filter(intv => intv.name !== projetFormData.responsableChantier).length})</label>
                       {projetIntervenants.filter(intv => intv.name !== projetFormData.responsableChantier).length === 0 ? (
                         <p style={{ color: 'var(--text-dim)', fontSize: '0.95rem', padding: '1rem', background: 'var(--card-bg-light)', borderRadius: '10px', textAlign: 'center' }}>Aucun intervenant assigné.</p>
-) : (
+                      ) : (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem', marginTop: '1rem', maxHeight: '350px', overflowY: 'auto', paddingRight: '10px' }}>
                           {projetIntervenants.filter(intv => intv.name !== projetFormData.responsableChantier).map((intv, i) => (
                             <div key={i} style={{ padding: '1rem', background: 'var(--card-bg-light)', border: '1px solid var(--border-glass)', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
@@ -1728,10 +1790,10 @@ function App() {
             )}
 
             {projetView === 'permitTravail' && selectedProjetIndex !== null && (
-              <div className="animate-fade-in" style={{ maxWidth: '1400px', margin: '0 auto', display: 'grid', gridTemplateColumns: '420px 1fr', gap: '2rem' }}>
+              <div className="animate-fade-in" style={{ maxWidth: '1600px', margin: '0 auto', display: 'grid', gridTemplateColumns: '420px 1fr', gap: '2rem', alignItems: 'start' }}>
                 <div className="glass-panel" style={{ padding: '2rem', height: 'fit-content', position: 'sticky', top: '100px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
-                    <button className="btn-icon" onClick={() => setProjetView('detailProjet')}>←</button>
+                    <button className="btn-icon" onClick={() => setProjetView('detailProjet')}>🔙</button>
                     <h2 style={{ fontSize: '1.2rem', margin: 0 }}>Permis de Travail</h2>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -1752,11 +1814,11 @@ function App() {
                     </div>
                     <div>
                       <label className="input-label">Description de l'opération (travail & équipement concerné)</label>
-                      <textarea 
-                        className="glass-input" 
-                        style={{ minHeight: '140px', resize: 'vertical' }} 
-                        value={permitFormData.descriptionOperation} 
-                        onChange={e => setPermitFormData({ ...permitFormData, descriptionOperation: e.target.value })} 
+                      <textarea
+                        className="glass-input"
+                        style={{ minHeight: '140px', resize: 'vertical' }}
+                        value={permitFormData.descriptionOperation}
+                        onChange={e => setPermitFormData({ ...permitFormData, descriptionOperation: e.target.value })}
                         placeholder="Détaillez ici les travaux à effectuer et les équipements utilisés..."
                       />
                     </div>
@@ -1803,7 +1865,7 @@ function App() {
                             </label>
                           ))}
                         </div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: '800', color: 'var(--primary)', textTransform: 'uppercase', marginBottom: '1rem' }}>🛡️ Précautions générales</div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: '800', color: 'var(--primary)', textTransform: 'uppercase', marginBottom: '1rem' }}>Précautions générales</div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                           {['Extincteur', 'Moyen de communication', 'Balisage zone à risque', 'Validation PM ou Responsable site', 'TBT – Briefing avant de démarrer'].map(p => (
                             <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.75rem' }}>
@@ -1815,7 +1877,7 @@ function App() {
 
                       {permitFormData.typesTravaux.includes('Travail à chaud') && (
                         <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#ef4444', textTransform: 'uppercase', marginBottom: '1rem' }}>🔥 Travail à chaud</div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#ef4444', textTransform: 'uppercase', marginBottom: '1rem' }}>Travail à chaud</div>
                           <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#ef4444', marginBottom: '0.5rem', marginTop: '0.5rem' }}>NATURE DES TRAVAUX</div>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', marginBottom: '1rem' }}>
                             {['Soudure', 'Meulage', 'Découpe', 'Brasage', 'Autre'].map(n => (
@@ -1848,7 +1910,7 @@ function App() {
 
                       {permitFormData.typesTravaux.includes('Travaux électriques') && (
                         <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(245, 158, 11, 0.05)', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
-                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#f59e0b', textTransform: 'uppercase', marginBottom: '1rem' }}>⚡ Travaux Électriques</div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#f59e0b', textTransform: 'uppercase', marginBottom: '1rem' }}>Travaux Électriques</div>
                           <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>
                             {['Travaux BT', 'Travaux HT', 'Tension > 50V'].map(t => (
                               <label key={t} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem' }}>
@@ -1878,7 +1940,7 @@ function App() {
 
                       {permitFormData.typesTravaux.includes('Travail en hauteur') && (
                         <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#10b981', textTransform: 'uppercase', marginBottom: '1rem' }}>🏗️ Travail en Hauteur</div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#10b981', textTransform: 'uppercase', marginBottom: '1rem' }}>Travail en Hauteur</div>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                             <div>
                               <label className="input-label" style={{ fontSize: '0.65rem' }}>Hauteur de chute</label>
@@ -1926,7 +1988,7 @@ function App() {
 
                       {permitFormData.typesTravaux.includes('Levage') && (
                         <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#3b82f6', textTransform: 'uppercase', marginBottom: '1rem' }}>⛓️ Levage</div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#3b82f6', textTransform: 'uppercase', marginBottom: '1rem' }}>Levage</div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                             {[
                               'Approbation du plan de levage',
@@ -1949,7 +2011,7 @@ function App() {
 
                       {permitFormData.typesTravaux.includes('Travaux de fouille') && (
                         <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(120, 113, 108, 0.05)', borderRadius: '12px', border: '1px solid rgba(120, 113, 108, 0.2)' }}>
-                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#78716c', textTransform: 'uppercase', marginBottom: '1rem' }}>🚜 Fouille</div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#78716c', textTransform: 'uppercase', marginBottom: '1rem' }}>Fouille</div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                             {[
                               'Vérification de la stabilité du sol',
@@ -1973,7 +2035,7 @@ function App() {
 
                       {permitFormData.typesTravaux.includes('Co-activité SIMOPS') && (
                         <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(139, 92, 246, 0.05)', borderRadius: '12px', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
-                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#8b5cf6', textTransform: 'uppercase', marginBottom: '1rem' }}>🔄 SIMOPS</div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#8b5cf6', textTransform: 'uppercase', marginBottom: '1rem' }}>SIMOPS</div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                             {[
                               'Nomination d’un coordinateur bien identifié sur site ayant autorité',
@@ -1986,7 +2048,7 @@ function App() {
                               </label>
                             ))}
                           </div>
-                          
+
                           <div style={{ marginTop: '1rem' }}>
                             <label className="input-label" style={{ fontSize: '0.7rem', color: '#8b5cf6' }}>Description des différentes co-activités:</label>
                             <textarea className="glass-input" style={{ width: '100%', minHeight: '80px', fontSize: '0.8rem', padding: '0.5rem' }} value={permitFormData.simopsDescription} onChange={e => setPermitFormData({ ...permitFormData, simopsDescription: e.target.value })} placeholder="Détaillez les interactions..."></textarea>
@@ -1999,7 +2061,7 @@ function App() {
                       )}
                       {permitFormData.typesTravaux.includes('Travaux de manutention') && (
                         <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(20, 184, 166, 0.05)', borderRadius: '12px', border: '1px solid rgba(20, 184, 166, 0.2)' }}>
-                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#14b8a6', textTransform: 'uppercase', marginBottom: '1rem' }}>📦 Manutention</div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#14b8a6', textTransform: 'uppercase', marginBottom: '1rem' }}>Manutention</div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                             {[
                               'Sécurisation de la charge avant toute manipulation',
@@ -2022,7 +2084,7 @@ function App() {
 
                       {permitFormData.typesTravaux.includes('Travaux de battage') && (
                         <div className="animate-slide-up" style={{ padding: '1rem', background: 'rgba(244, 63, 94, 0.05)', borderRadius: '12px', border: '1px solid rgba(244, 63, 94, 0.2)' }}>
-                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#f43f5e', textTransform: 'uppercase', marginBottom: '1rem' }}>🔨 Battage</div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#f43f5e', textTransform: 'uppercase', marginBottom: '1rem' }}>Battage</div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                             {[
                               'Repérage préalable',
@@ -2052,37 +2114,42 @@ function App() {
                       <div><label className="input-label">Superviseur</label><select className="glass-input" value={permitFormData.responsable} onChange={e => setPermitFormData({ ...permitFormData, responsable: e.target.value })}><option value="">Choisir...</option>{employees.map(emp => <option key={emp.id} value={emp.name}>{emp.name}</option>)}</select></div>
                     </div>
                     <div><label className="input-label">Validation HSE/OPS</label><input type="text" className="glass-input" list="all-employees-list" value={permitFormData.validationHSE} onChange={e => setPermitFormData({ ...permitFormData, validationHSE: e.target.value })} /></div>
-                  </div>
-                </div>
 
-                <div style={{ position: 'relative' }}>
-                  <div style={{ position: 'absolute', top: '-50px', right: 0 }}>
-                    <button className="btn-primary" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }} onClick={async () => {
-                      try {
-                        showToast("Génération du Permis A4...", "info");
-                        const page1 = document.getElementById('permit-page-1');
-                        const page2 = document.getElementById('permit-page-2');
-                        const waitForImages = (el) => {
-                          const imgs = Array.from(el.querySelectorAll('img'));
-                          return Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })));
-                        };
-                        await Promise.all([waitForImages(page1), waitForImages(page2)]);
-                        const captureOptions = { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff' };
-                        const canvas1 = await html2canvas(page1, captureOptions);
-                        const canvas2 = await html2canvas(page2, captureOptions);
-                        const pdf = new jsPDF('p', 'mm', 'a4');
-                        const pdfWidth = pdf.internal.pageSize.getWidth();
-                        const pdfHeight = pdf.internal.pageSize.getHeight();
-                        pdf.addImage(canvas1.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, pdfHeight);
-                        pdf.addPage();
-                        pdf.addImage(canvas2.toDataURL('image/png'), 'PNG', 0, 0, pdfWidth, pdfHeight);
-                        pdf.save(`Permis_Travail_${projetFormData.nomChantier}_${permitFormData.date}.pdf`);
-                        showToast("PDF A4 généré !");
-                      } catch (err) { showToast("Erreur: " + err.message, "danger"); }
-                    }}>🖨️ Imprimer / PDF</button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem' }}>
+                      <button className="btn-primary" style={{ width: '100%', background: 'var(--info)' }} onClick={async () => {
+                        if (!isOnline) { showToast("Connexion internet requise", "danger"); return; }
+                        const waitingPermit = { ...permitFormData, status: 'En attente' };
+                        let updatedPermits = [...(projetFormData.permits || [])];
+                        if (selectedPermitIndex !== null) {
+                          updatedPermits[selectedPermitIndex] = waitingPermit;
+                        } else {
+                          updatedPermits.unshift(waitingPermit);
+                        }
+
+                        const updatedProj = { ...projetFormData, permits: updatedPermits };
+                        try {
+                          showToast("Envoi de la demande...", "info");
+                          const res = await apiCall('POST', '/projets', updatedProj);
+                          if (res.status === 200) {
+                            const newList = [...projets];
+                            newList[selectedProjetIndex] = updatedProj;
+                            setProjets(newList);
+                            safeStorage.setItem('gp_projets_v1', JSON.stringify(newList));
+                            setProjetFormData(updatedProj);
+                            showToast("Demande de validation envoyée !");
+                            if (typeof addNotification === 'function') {
+                              addNotification("Validation PWT", `Une demande de validation pour le PWT #${waitingPermit.id.slice(-6)} a été envoyée.`, "info");
+                            }
+                            setProjetView('detailProjet');
+                          }
+                        } catch (e) { showToast(e.message, "danger"); }
+                      }}>Demande de validation</button>
+                    </div>
+                    </div>
                   </div>
 
-                  <div style={{ position: 'relative' }}>
+                  {/* Preview Side */}
+                  <div style={{ position: 'relative', overflowX: 'auto', paddingLeft: '1.5rem' }}>
                     <div style={{ position: 'absolute', top: '-50px', right: 0 }}>
                       <button className="btn-primary" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }} onClick={async () => {
                         try {
@@ -2093,22 +2160,22 @@ function App() {
                             return Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })));
                           };
                           await waitForImages(element);
-                          
-                          const canvas = await html2canvas(element, { 
-                            scale: 2, 
-                            useCORS: true, 
-                            allowTaint: true, 
+
+                          const canvas = await html2canvas(element, {
+                            scale: 2,
+                            useCORS: true,
+                            allowTaint: true,
                             backgroundColor: '#ffffff',
                             logging: false
                           });
-                          
+
                           const pdf = new jsPDF('p', 'mm', 'a4');
                           const imgData = canvas.toDataURL('image/png');
                           const pdfWidth = pdf.internal.pageSize.getWidth();
                           const pdfHeight = pdf.internal.pageSize.getHeight();
                           const imgWidth = pdfWidth;
                           const imgHeight = (canvas.height * imgWidth) / canvas.width;
-                          
+
                           let heightLeft = imgHeight;
                           let position = 0;
 
@@ -2123,7 +2190,7 @@ function App() {
                             pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
                             heightLeft -= pdfHeight;
                           }
-                          
+
                           pdf.save(`PWT_${projetFormData.nomChantier}_${permitFormData.date}.pdf`);
                           showToast("PDF dynamique généré !");
                         } catch (err) { showToast("Erreur: " + err.message, "danger"); }
@@ -2139,7 +2206,7 @@ function App() {
                         </div>
                       </div>
                       <div style={{ textAlign: 'center', fontSize: '15px', fontWeight: '900', borderTop: '1.5px solid black', borderBottom: '1.5px solid black', padding: '5px 0', marginBottom: '8px' }}>Permis de travail (PWT)</div>
-                      
+
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', marginBottom: '4px' }}>
                         <tbody>
                           <tr>
@@ -2192,7 +2259,7 @@ function App() {
                               </div>
                             </td>
                             <td style={{ border: '1px solid #000', padding: '3px 6px', width: '18%', fontWeight: 'bold' }}>Travail à chaud</td>
-                            
+
                             <td style={{ border: '1px solid #000', padding: '0', width: '25px', textAlign: 'center', height: '22px' }}>
                               <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <div style={{ width: '12px', height: '12px', border: '1.5px solid #000', background: permitFormData.typesTravaux.includes('Travaux électriques') ? '#000' : 'none', color: '#fff', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: '1' }}>
@@ -2336,10 +2403,10 @@ function App() {
                         </table>
 
                         {[
-                          { 
-                            title: 'TRAVAIL À CHAUD', 
-                            color: '#fee2e2', 
-                            show: permitFormData.typesTravaux.includes('Travail à chaud'), 
+                          {
+                            title: 'TRAVAIL À CHAUD',
+                            color: '#fee2e2',
+                            show: permitFormData.typesTravaux.includes('Travail à chaud'),
                             all: [
                               'Inspection avant démarrage travaux',
                               'Mise en place de bâche ignifugée',
@@ -2347,33 +2414,33 @@ function App() {
                               'Moyen d’extinction disponible (2 extincteurs à poudre)',
                               'Balisage de la zone de travail',
                               'Coordination'
-                            ], 
+                            ],
                             selected: permitFormData.chaudPrecautions,
                             nature: ['Soudure', 'Meulage', 'Découpe', 'Brasage', 'Autre'],
                             natureSelected: permitFormData.chaudNature,
                             natureAutre: permitFormData.chaudNatureAutre
                           },
-                          { 
-                            title: 'TRAVAUX ÉLECTRIQUES', 
-                            color: '#fef3c7', 
-                            show: permitFormData.typesTravaux.includes('Travaux électriques'), 
+                          {
+                            title: 'TRAVAUX ÉLECTRIQUES',
+                            color: '#fef3c7',
+                            show: permitFormData.typesTravaux.includes('Travaux électriques'),
                             all: [
-                              'Consignation des installations', 
-                              'Ensemble de l’installation hors tension', 
-                              'Zone d’exclusion balisée', 
-                              'Personnel intervenant sur les zones à risques formé et/ou certifié', 
+                              'Consignation des installations',
+                              'Ensemble de l’installation hors tension',
+                              'Zone d’exclusion balisée',
+                              'Personnel intervenant sur les zones à risques formé et/ou certifié',
                               'TBT – Briefing avant de démarrer',
                               'Autre'
-                            ], 
+                            ],
                             selected: permitFormData.elecPrecautions,
                             nature: ['Travaux BT', 'Travaux HT', 'Tension > 50V'],
                             natureSelected: permitFormData.elecTypes,
                             natureAutre: permitFormData.elecAutre
                           },
-                          { 
-                            title: 'TRAVAIL EN HAUTEUR', 
-                            color: '#dcfce7', 
-                            show: permitFormData.typesTravaux.includes('Travail en hauteur'), 
+                          {
+                            title: 'TRAVAIL EN HAUTEUR',
+                            color: '#dcfce7',
+                            show: permitFormData.typesTravaux.includes('Travail en hauteur'),
                             all: [
                               'Accès et sortie sûrs et sécurisés',
                               'La plate-forme, la scène ou l\'échafaudage sont montés et vérifiés comme étant sûrs pour le travail',
@@ -2381,15 +2448,15 @@ function App() {
                               'Mise en œuvre de mesures d\'atténuation des risques de chute (longes d\'outils, balisage des zones à risque..)',
                               'Échafaudage / échelle approuvé (le cas échéant)',
                               'Autre'
-                            ], 
-                            selected: permitFormData.hauteurPrecautions, 
+                            ],
+                            selected: permitFormData.hauteurPrecautions,
                             heightDetails: true,
-                            natureSelected: permitFormData.hauteurPrecautions.includes('Autre') ? [permitFormData.hauteurAutre] : [] 
+                            natureSelected: permitFormData.hauteurPrecautions.includes('Autre') ? [permitFormData.hauteurAutre] : []
                           },
-                          { 
-                            title: 'LEVAGE', 
-                            color: '#dbeafe', 
-                            show: permitFormData.typesTravaux.includes('Levage'), 
+                          {
+                            title: 'LEVAGE',
+                            color: '#dbeafe',
+                            show: permitFormData.typesTravaux.includes('Levage'),
                             all: [
                               'Approbation du plan de levage',
                               'EPI adapté à l’opération',
@@ -2397,14 +2464,14 @@ function App() {
                               'L’ensemble du matériel est certifié',
                               'Inspection préalable des engins à utiliser (Nacelle, grue...)',
                               'Autre'
-                            ], 
+                            ],
                             selected: permitFormData.levagePrecautions,
-                            natureSelected: permitFormData.levagePrecautions.includes('Autre') ? [permitFormData.levageAutre] : [] 
+                            natureSelected: permitFormData.levagePrecautions.includes('Autre') ? [permitFormData.levageAutre] : []
                           },
-                          { 
-                            title: 'TRAVAUX DE FOUILLE', 
-                            color: '#f5f5f4', 
-                            show: permitFormData.typesTravaux.includes('Travaux de fouille'), 
+                          {
+                            title: 'TRAVAUX DE FOUILLE',
+                            color: '#f5f5f4',
+                            show: permitFormData.typesTravaux.includes('Travaux de fouille'),
                             all: [
                               'Vérification de la stabilité du sol',
                               'Balisage de la zone de travail',
@@ -2413,14 +2480,14 @@ function App() {
                               'Vérification des réseaux souterrains',
                               'Interdiction de passage non autorisé',
                               'Autre'
-                            ], 
+                            ],
                             selected: permitFormData.fouillePrecautions,
-                            natureSelected: permitFormData.fouillePrecautions.includes('Autre') ? [permitFormData.fouilleAutre] : [] 
+                            natureSelected: permitFormData.fouillePrecautions.includes('Autre') ? [permitFormData.fouilleAutre] : []
                           },
-                          { 
-                            title: 'MANUTENTION', 
-                            color: '#ccfbf1', 
-                            show: permitFormData.typesTravaux.includes('Travaux de manutention'), 
+                          {
+                            title: 'MANUTENTION',
+                            color: '#ccfbf1',
+                            show: permitFormData.typesTravaux.includes('Travaux de manutention'),
                             all: [
                               'Sécurisation de la charge avant toute manipulation',
                               'Respect de la charge réglementaire',
@@ -2428,14 +2495,14 @@ function App() {
                               'Supervision tout au long de l’opération',
                               'Coordination',
                               'Autre'
-                            ], 
+                            ],
                             selected: permitFormData.manutentionPrecautions,
-                            natureSelected: permitFormData.manutentionPrecautions.includes('Autre') ? [permitFormData.manutentionAutre] : [] 
+                            natureSelected: permitFormData.manutentionPrecautions.includes('Autre') ? [permitFormData.manutentionAutre] : []
                           },
-                          { 
-                            title: 'BATTAGE', 
-                            color: '#ffe4e6', 
-                            show: permitFormData.typesTravaux.includes('Travaux de battage'), 
+                          {
+                            title: 'BATTAGE',
+                            color: '#ffe4e6',
+                            show: permitFormData.typesTravaux.includes('Travaux de battage'),
                             all: [
                               'Repérage préalable',
                               'Limitation de puissance',
@@ -2445,23 +2512,23 @@ function App() {
                               'Rotation du personnel',
                               'Vérification du sol avant travaux',
                               'Autre'
-                            ], 
+                            ],
                             selected: permitFormData.battagePrecautions,
-                            natureSelected: permitFormData.battagePrecautions.includes('Autre') ? [permitFormData.battageAutre] : [] 
+                            natureSelected: permitFormData.battagePrecautions.includes('Autre') ? [permitFormData.battageAutre] : []
                           },
-                          { 
-                            title: 'CO-ACTIVITÉ SIMOPS', 
-                            color: '#ede9fe', 
-                            show: permitFormData.typesTravaux.includes('Co-activité SIMOPS'), 
+                          {
+                            title: 'CO-ACTIVITÉ SIMOPS',
+                            color: '#ede9fe',
+                            show: permitFormData.typesTravaux.includes('Co-activité SIMOPS'),
                             all: [
                               'Nomination d’un coordinateur bien identifié sur site ayant autorité',
                               'Mise en place d’un plan B en cas d’interférence augmentant le risque',
                               'TBT – pré briefing en présence des 2 équipes',
                               'Autre'
-                            ], 
+                            ],
                             selected: permitFormData.simopsPrecautions,
                             description: permitFormData.simopsDescription,
-                            natureSelected: permitFormData.simopsPrecautions.includes('Autre') ? [permitFormData.simopsAutre] : [] 
+                            natureSelected: permitFormData.simopsPrecautions.includes('Autre') ? [permitFormData.simopsAutre] : []
                           }
                         ].filter(s => s.show).map((sec, idx) => {
                           if (sec.title === 'TRAVAIL EN HAUTEUR') {
@@ -2506,7 +2573,7 @@ function App() {
                                       <div style={{ width: '10px', height: '10px', border: '1.2px solid #000', background: sec.selected.includes(sec.all[0]) ? '#000' : 'none', margin: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '8px', fontWeight: 'bold' }}>{sec.selected.includes(sec.all[0]) ? '✓' : ''}</div>
                                     </td>
                                     <td style={{ border: '1px solid #000', padding: '3px 4px', width: '23%', fontSize: '8px', lineHeight: '1.1' }}>{sec.all[0]}</td>
-                                    
+
                                     <td style={{ border: '1px solid #000', width: '22px', textAlign: 'center', padding: '3px' }}>
                                       <div style={{ width: '10px', height: '10px', border: '1.2px solid #000', background: sec.selected.includes(sec.all[1]) ? '#000' : 'none', margin: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '8px', fontWeight: 'bold' }}>{sec.selected.includes(sec.all[1]) ? '✓' : ''}</div>
                                     </td>
@@ -2527,7 +2594,7 @@ function App() {
                                       <div style={{ width: '10px', height: '10px', border: '1.2px solid #000', background: sec.selected.includes(sec.all[3]) ? '#000' : 'none', margin: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '8px', fontWeight: 'bold' }}>{sec.selected.includes(sec.all[3]) ? '✓' : ''}</div>
                                     </td>
                                     <td style={{ border: '1px solid #000', padding: '3px 4px', fontSize: '8px', lineHeight: '1.1' }}>{sec.all[3]}</td>
-                                    
+
                                     <td style={{ border: '1px solid #000', width: '22px', textAlign: 'center', padding: '3px' }}>
                                       <div style={{ width: '10px', height: '10px', border: '1.2px solid #000', background: sec.selected.includes(sec.all[4]) ? '#000' : 'none', margin: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '8px', fontWeight: 'bold' }}>{sec.selected.includes(sec.all[4]) ? '✓' : ''}</div>
                                     </td>
@@ -2620,958 +2687,964 @@ function App() {
                           </tbody>
                         </table>
                       </div>
-                      <div style={{ marginTop: '20px', fontSize: '7.5px', color: '#999', textAlign: 'center', borderTop: '1px solid #eee', paddingTop: '6px' }}>
-                        MADAGREEN POWER — www.madagreen-power.com — MGP-FRM-01.e.003-ver.01
-                      </div>
-                    </div>
-                  </div>
                 </div>
               </div>
+            </div>
+
             )}
 
             {projetView === 'editBriefing' && selectedProjetIndex !== null && (
-              <div className="animate-fade-in" style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: '400px 1fr', gap: '2rem' }}>
-                {/* Form Side */}
-                <div className="glass-panel" style={{ padding: '2rem', height: 'fit-content', position: 'sticky', top: '100px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
-                    <button className="btn-icon" onClick={() => setProjetView('detailProjet')}>←</button>
-                    <h2 style={{ fontSize: '1.2rem' }}>Éditer le Briefing</h2>
-                  </div>
+                    <div className="animate-fade-in" style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: '400px 1fr', gap: '2rem' }}>
+                      {/* Form Side */}
+                      <div className="glass-panel" style={{ padding: '2rem', height: 'fit-content', position: 'sticky', top: '100px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+                          <button className="btn-icon" onClick={() => setProjetView('detailProjet')}>←</button>
+                          <h2 style={{ fontSize: '1.2rem' }}>Éditer le Briefing</h2>
+                        </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                    <div>
-                      <label className="input-label">Sujet du Briefing</label>
-                      <input type="text" className="glass-input" value={briefingFormData.topic} onChange={e => setBriefingFormData({ ...briefingFormData, topic: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="input-label">Date</label>
-                      <input type="date" className="glass-input" value={briefingFormData.date} onChange={e => setBriefingFormData({ ...briefingFormData, date: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="input-label">Responsable Site (PM)</label>
-                      <select className="glass-input" value={briefingFormData.responsable} onChange={e => setBriefingFormData({ ...briefingFormData, responsable: e.target.value })}>
-                        {employees.map(emp => (<option key={emp.matricule} value={emp.name}>{emp.name}</option>))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="input-label">Description des points évoqués</label>
-                      <textarea className="glass-input" style={{ minHeight: '100px', resize: 'vertical' }} value={briefingFormData.description} onChange={e => setBriefingFormData({ ...briefingFormData, description: e.target.value })} placeholder="Détaillez les consignes partagées..." />
-                    </div>
-                    <div>
-                      <label className="input-label">Commentaires et points de vigilance</label>
-                      <textarea className="glass-input" style={{ minHeight: '100px', resize: 'vertical' }} value={briefingFormData.commentaires} onChange={e => setBriefingFormData({ ...briefingFormData, commentaires: e.target.value })} placeholder="Notes additionnelles ou risques spécifiques..." />
-                    </div>
-
-                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1rem' }}>
-                      <label className="input-label">Intervenants Présents ({briefingFormData.intervenants.length})</label>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '300px', overflowY: 'auto', marginBottom: '1rem' }}>
-                        {briefingFormData.intervenants.map((intv, i) => (
-                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: '0.5rem 0.8rem', borderRadius: '8px', fontSize: '0.85rem' }}>
-                            <span>{intv.name}</span>
-                            <button style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }} onClick={() => setBriefingFormData({ ...briefingFormData, intervenants: briefingFormData.intervenants.filter((_, idx) => idx !== i) })}>✕</button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                          <div>
+                            <label className="input-label">Sujet du Briefing</label>
+                            <input type="text" className="glass-input" value={briefingFormData.topic} onChange={e => setBriefingFormData({ ...briefingFormData, topic: e.target.value })} />
                           </div>
-                        ))}
-                      </div>
-                      <div style={{ position: 'relative' }}>
-                        <input type="text" className="glass-input" placeholder="Ajouter un intervenant..." value={intervenantSearch} onChange={e => setIntervenantSearch(e.target.value)} />
-                        {intervenantSearch.trim().length > 0 && (
-                          <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, zIndex: 10, background: '#1e293b', border: '1px solid var(--border-glass)', borderRadius: '12px', marginBottom: '5px', maxHeight: '200px', overflowY: 'auto', boxShadow: '0 -10px 25px rgba(0,0,0,0.3)' }}>
-                            {employees.filter(emp => !briefingFormData.intervenants.some(intv => intv.matricule === emp.matricule)).filter(emp => emp.name.toLowerCase().includes(intervenantSearch.toLowerCase())).map(emp => (
-                              <div key={emp.matricule} onClick={() => { setBriefingFormData({ ...briefingFormData, intervenants: [...briefingFormData.intervenants, { matricule: emp.matricule, name: emp.name, role: emp.role }] }); setIntervenantSearch('') }} style={{ padding: '0.8rem 1rem', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{emp.name}</div>
-                              </div>
-                            ))}
+                          <div>
+                            <label className="input-label">Date</label>
+                            <input type="date" className="glass-input" value={briefingFormData.date} onChange={e => setBriefingFormData({ ...briefingFormData, date: e.target.value })} />
                           </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <button className="btn-primary" style={{ width: '100%', marginTop: '1rem' }} onClick={async () => {
-                      if (!isOnline) { showToast("Connexion internet requise", "danger"); return; }
-                      let updatedBriefings = [...(projetFormData.briefings || [])];
-                      if (selectedBriefingIndex !== null) {
-                        updatedBriefings[selectedBriefingIndex] = briefingFormData;
-                      } else {
-                        updatedBriefings.unshift(briefingFormData);
-                      }
-
-                      const updatedProj = {
-                        ...projetFormData,
-                        intervenants: projetIntervenants,
-                        dateCreation: projets[selectedProjetIndex]?.dateCreation || new Date().toLocaleDateString('fr-FR'),
-                        briefings: updatedBriefings
-                      };
-                      try {
-                        showToast("Enregistrement...", "info");
-                        const res = await apiCall('POST', '/projets', updatedProj);
-                        if (res.status === 200) {
-                          const newList = [...projets];
-                          newList[selectedProjetIndex] = updatedProj;
-                          setProjets(newList);
-                          safeStorage.setItem('gp_projets_v1', JSON.stringify(newList));
-                          setProjetFormData(updatedProj);
-                          showToast("Briefing enregistré !");
-                          addNotification("Safety Briefing", `Un nouveau briefing a été enregistré pour le chantier "${projetFormData.nomChantier}"`, "info");
-                          setProjetView('detailProjet');
-                        }
-                      } catch (e) { showToast(e.message, "danger"); }
-                    }}>💾 Enregistrer le Briefing</button>
-                  </div>
-                </div>
-
-                {/* Preview Side */}
-                <div style={{ position: 'relative' }}>
-                  <div style={{ position: 'absolute', top: '-50px', right: 0 }}>
-                    <button className="btn-primary" onClick={async () => {
-                      try {
-                        showToast("Génération du document A4...", "info");
-                        const page1 = document.getElementById('sb-page-1');
-                        const page2 = document.getElementById('sb-page-2');
-
-                        // Wait for all images to fully load before capture
-                        const waitForImages = (el) => {
-                          const imgs = Array.from(el.querySelectorAll('img'));
-                          return Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(resolve => { img.onload = resolve; img.onerror = resolve; })));
-                        };
-                        await Promise.all([waitForImages(page1), waitForImages(page2)]);
-
-                        const captureOptions = { scale: 2, useCORS: true, allowTaint: true, logging: false, imageTimeout: 5000, backgroundColor: '#ffffff' };
-                        const canvas1 = await html2canvas(page1, captureOptions);
-                        const canvas2 = await html2canvas(page2, captureOptions);
-
-                        const pdf = new jsPDF('p', 'mm', 'a4');
-                        const pdfWidth = pdf.internal.pageSize.getWidth();
-                        const pdfHeight = pdf.internal.pageSize.getHeight();
-
-                        const img1 = canvas1.toDataURL('image/png');
-                        const img2 = canvas2.toDataURL('image/png');
-
-                        pdf.addImage(img1, 'PNG', 0, 0, pdfWidth, pdfHeight);
-                        pdf.addPage();
-                        pdf.addImage(img2, 'PNG', 0, 0, pdfWidth, pdfHeight);
-
-                        pdf.save(`Safety_Briefing_${projetFormData.nomChantier}_${briefingFormData.date}.pdf`);
-                        showToast(`Document PDF (2 pages) généré !`);
-                      } catch (err) { showToast("Erreur PDF: " + err.message, "danger"); }
-                    }}>🖨️ Imprimer / PDF A4</button>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
-                    {/* PAGE 1 */}
-                    <div id="sb-page-1" style={{
-                      background: 'white',
-                      color: 'black',
-                      padding: '15mm',
-                      height: '297mm',
-                      width: '210mm',
-                      margin: '0 auto',
-                      fontFamily: '"Segoe UI", Arial, sans-serif',
-                      boxSizing: 'border-box',
-                      display: 'flex',
-                      flexDirection: 'column'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', borderBottom: '2px solid #002060', paddingBottom: '10px' }}>
-                        <img src={logo} alt="Logo" style={{ height: '50px' }} />
-                        <h1 style={{ margin: 0, color: '#002060', fontSize: '24px', fontWeight: '800' }}>Safety Briefing Chantier</h1>
-                      </div>
-
-                      {/* Main Info Table */}
-                      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '30px' }}>
-                        <thead>
-                          <tr style={{ background: '#002060', color: 'white' }}>
-                            <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>PM Responsable Site</th>
-                            <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Date</th>
-                            <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Briefing</th>
-                            <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Chantier</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr>
-                            <td style={{ border: '1px solid #333', padding: '12px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px' }}>{briefingFormData.responsable}</td>
-                            <td style={{ border: '1px solid #333', padding: '12px', textAlign: 'center', fontSize: '12px' }}>{new Date(briefingFormData.date).toLocaleDateString('fr-FR')}</td>
-                            <td style={{ border: '1px solid #333', padding: '12px', textAlign: 'center', fontSize: '12px' }}>{briefingFormData.topic}</td>
-                            <td style={{ border: '1px solid #333', padding: '12px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px' }}>{projetFormData.nomChantier}</td>
-                          </tr>
-                        </tbody>
-                      </table>
-
-                      {/* Participants Table */}
-                      <div style={{ marginBottom: '10px', fontWeight: '900', fontSize: '13px', color: '#002060', textTransform: 'uppercase' }}>LISTE DES PARTICIPANTS</div>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', flex: 1 }}>
-                        <thead>
-                          <tr style={{ background: '#002060', color: 'white' }}>
-                            <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Fonction</th>
-                            <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Nom</th>
-                            <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Signature</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {briefingFormData.intervenants.slice(0, 18).map((intv, idx) => (
-                            <tr key={idx}>
-                              <td style={{ border: '1px solid #333', padding: '8px', fontSize: '11px' }}>{intv.role}</td>
-                              <td style={{ border: '1px solid #333', padding: '8px', fontSize: '11px', fontWeight: 'bold' }}>{intv.name}</td>
-                              <td style={{ border: '1px solid #333', padding: '4px', height: '50px', textAlign: 'center', verticalAlign: 'middle' }}>
-                                {(() => {
-                                  const emp = employees.find(e => e.name === intv.name);
-                                  return emp?.signature
-                                    ? <img src={emp.signature} alt="Signature" style={{ maxHeight: '45px', maxWidth: '150px', objectFit: 'contain', display: 'block', margin: '0 auto' }} />
-                                    : null;
-                                })()}
-                              </td>
-                            </tr>
-                          ))}
-                          {[...Array(Math.max(0, 18 - briefingFormData.intervenants.length))].map((_, i) => (
-                            <tr key={`empty-${i}`}>
-                              <td style={{ border: '1px solid #333', padding: '15px' }}></td>
-                              <td style={{ border: '1px solid #333', padding: '15px' }}></td>
-                              <td style={{ border: '1px solid #333', padding: '15px' }}></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <div style={{ marginTop: '10px', fontSize: '9px', color: '#999', textAlign: 'center' }}>Page 1 / 2</div>
-                    </div>
-
-                    {/* PAGE 2 */}
-                    <div id="sb-page-2" style={{
-                      background: 'white',
-                      color: 'black',
-                      padding: '15mm',
-                      height: '297mm',
-                      width: '210mm',
-                      margin: '0 auto',
-                      fontFamily: '"Segoe UI", Arial, sans-serif',
-                      boxSizing: 'border-box'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', borderBottom: '2px solid #002060', paddingBottom: '10px' }}>
-                        <img src={logo} alt="Logo" style={{ height: '50px' }} />
-                        <h1 style={{ margin: 0, color: '#002060', fontSize: '24px', fontWeight: '800' }}>Safety Briefing Chantier</h1>
-                      </div>
-
-                      {/* Description Section */}
-                      <div style={{ marginBottom: '25px' }}>
-                        <div style={{ background: '#002060', color: 'white', padding: '10px', fontSize: '11px', fontWeight: 'bold', textAlign: 'center', border: '1px solid #002060', textTransform: 'uppercase' }}>
-                          Description des points et consignes évoquées
-                        </div>
-                        <div style={{ border: '1px solid #333', borderTop: 'none', padding: '20px', minHeight: '150px', fontSize: '12px', lineHeight: '1.6', color: '#333', whiteSpace: 'pre-wrap' }}>
-                          {briefingFormData.description || "Aucun commentaire spécifique."}
-                        </div>
-                      </div>
-
-                      {/* Comments Section */}
-                      <div style={{ marginBottom: '25px' }}>
-                        <div style={{ background: '#002060', color: 'white', padding: '10px', fontSize: '11px', fontWeight: 'bold', textAlign: 'center', border: '1px solid #002060', textTransform: 'uppercase' }}>
-                          Commentaires et points de vigilance
-                        </div>
-                        <div style={{ border: '1px solid #333', borderTop: 'none', padding: '20px', minHeight: '120px', fontSize: '12px', lineHeight: '1.6', color: '#333', whiteSpace: 'pre-wrap' }}>
-                          {briefingFormData.commentaires || "Aucun commentaire spécifique."}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {projetView === 'editProjet' && selectedProjetIndex !== null && (
-              <div className="glass-panel animate-slide-up" style={{ maxWidth: '600px', margin: '0 auto', padding: '3rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1.5rem' }}>
-                  <button className="btn-icon" onClick={() => {
-                    if (projetWizardStep > 1) {
-                      setProjetWizardStep(projetWizardStep - 1)
-                    } else {
-                      setProjetView('projet');
-                      setProjetWizardStep(1);
-                    }
-                  }}>{"<"}</button>
-                  <h2>Modifier le Projet</h2>
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem' }}>
-                  <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: 'var(--primary)' }}></div>
-                  <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: projetWizardStep >= 2 ? 'var(--primary)' : 'rgba(255,255,255,0.1)' }}></div>
-                  <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: projetWizardStep >= 3 ? 'var(--primary)' : 'rgba(255,255,255,0.1)' }}></div>
-                </div>
-
-                {projetWizardStep === 1 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Etape 1/3 - Informations du projet</p>
-                    <div><label className="input-label">Nom du Chantier</label><input type="text" className="glass-input" value={projetFormData.nomChantier} onChange={e => setProjetFormData({ ...projetFormData, nomChantier: e.target.value })} /></div>
-                    <div><label className="input-label">Lieu</label><input type="text" className="glass-input" value={projetFormData.lieu} onChange={e => setProjetFormData({ ...projetFormData, lieu: e.target.value })} /></div>
-                    <div><label className="input-label">Date de début</label><input type="date" className="glass-input" value={projetFormData.dateDebut} onChange={e => setProjetFormData({ ...projetFormData, dateDebut: e.target.value })} /></div>
-                    <button type="button" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} disabled={!projetFormData.nomChantier || !projetFormData.lieu || !projetFormData.dateDebut} onClick={() => setProjetWizardStep(2)}>Suivant →</button>
-                  </div>
-                )}
-
-                {projetWizardStep === 2 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Etape 2/3 - Responsable et Intervenants</p>
-                    <div>
-                      <label className="input-label">Responsable Chantier (HSE Passport)</label>
-                      <select className="glass-input" value={projetFormData.responsableChantier} onChange={e => setProjetFormData({ ...projetFormData, responsableChantier: e.target.value })}>
-                        <option value="">Selectionner le responsable...</option>
-                        {employees.map(emp => (<option key={emp.matricule} value={emp.name}>{emp.name}</option>))}
-                      </select>
-                    </div>
-                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
-                      <label className="input-label">Intervenants ({projetIntervenants.length})</label>
-                      {projetIntervenants.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
-                          {projetIntervenants.map((intv, i) => (
-                            <span key={i} style={{ background: 'var(--primary-glow)', color: 'var(--primary)', padding: '0.3rem 0.8rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                              {intv.name}
-                              <span style={{ cursor: 'pointer', opacity: 0.7 }} onClick={() => setProjetIntervenants(prev => prev.filter((_, idx) => idx !== i))}>x</span>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <div style={{ position: 'relative' }}>
-                        <input type="text" className="glass-input" placeholder="Ajouter des intervenants..." value={intervenantSearch} onChange={e => setIntervenantSearch(e.target.value)} />
-                        {intervenantSearch.trim().length > 0 && (
-                          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, background: 'var(--bg-deep)', border: '1px solid var(--glass-border)', borderRadius: '12px', marginTop: '5px', maxHeight: '200px', overflowY: 'auto', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
-                            {employees.filter(emp => !projetIntervenants.some(intv => intv.matricule === emp.matricule)).filter(emp => emp.name.toLowerCase().includes(intervenantSearch.toLowerCase()) || emp.matricule.toLowerCase().includes(intervenantSearch.toLowerCase())).map(emp => (
-                              <div key={emp.matricule} onClick={() => { setProjetIntervenants(prev => [...prev, { matricule: emp.matricule, name: emp.name, role: emp.role }]); setIntervenantSearch('') }} style={{ padding: '0.8rem 1rem', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{emp.name}</div>
-                                <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>{emp.role}</div>
-                              </div>
-                            ))}
+                          <div>
+                            <label className="input-label">Responsable Site (PM)</label>
+                            <select className="glass-input" value={briefingFormData.responsable} onChange={e => setBriefingFormData({ ...briefingFormData, responsable: e.target.value })}>
+                              {employees.map(emp => (<option key={emp.matricule} value={emp.name}>{emp.name}</option>))}
+                            </select>
                           </div>
-                        )}
-                      </div>
-                    </div>
-                    <button type="button" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} disabled={!projetFormData.responsableChantier} onClick={() => setProjetWizardStep(3)}>Suivant (Materiels) →</button>
-                  </div>
-                )}
-
-                {projetWizardStep === 3 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Etape 3/3 - Materiels et EPC</p>
-                    <div>
-                      <label className="input-label">Outillage (Selection Caisse)</label>
-                      <select className="glass-input" value={projetFormData.outillageCaisse} onChange={e => setProjetFormData({ ...projetFormData, outillageCaisse: e.target.value })}>
-                        <option value="">Aucune caisse assignee...</option>
-                        {caisses.map(c => (<option key={c.numeroCaisse} value={c.numeroCaisse}>{c.numeroCaisse} - {c.affecterA}</option>))}
-                      </select>
-                    </div>
-                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
-                      <label className="input-label">Check-list EPC</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
-                        {[{ key: 'extincteurs', label: 'Extincteurs' }, { key: 'balisage', label: 'Balisage' }, { key: 'echafaudage', label: 'Echafaudage' }, { key: 'gardecorps', label: 'Garde-corps' }, { key: 'lignedevie', label: 'Lignes de vie' }, { key: 'eclairage', label: 'Eclairage' }, { key: 'kitantipollution', label: 'Anti-pollution' }].map(({ key, label }) => (
-                          <div key={key} onClick={() => setProjetFormData({ ...projetFormData, epc: { ...projetFormData.epc, [key]: !projetFormData.epc?.[key] } })} style={{ background: 'var(--card-bg-light)', padding: '0.75rem', borderRadius: '10px', cursor: 'pointer', border: projetFormData.epc?.[key] ? '1px solid var(--accent)' : '1px solid transparent', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.3s' }}>
-                            <input type="checkbox" checked={projetFormData.epc?.[key] || false} onChange={() => { }} style={{ width: '16px', height: '16px' }} />
-                            <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>{label}</span>
+                          <div>
+                            <label className="input-label">Description des points évoqués</label>
+                            <textarea className="glass-input" style={{ minHeight: '100px', resize: 'vertical' }} value={briefingFormData.description} onChange={e => setBriefingFormData({ ...briefingFormData, description: e.target.value })} placeholder="Détaillez les consignes partagées..." />
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                    <button type="button" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} onClick={async () => {
-                      const manager = employees.find(e => e.name === projetFormData.responsableChantier);
-                      let finalIntervenants = [...projetIntervenants];
-                      if (manager && !finalIntervenants.some(i => i.matricule === manager.matricule)) {
-                        finalIntervenants.push({ matricule: manager.matricule, name: manager.name, role: manager.role });
-                      }
-
-                      if (!isOnline) {
-                        showToast("Connexion internet requise pour mettre à jour", "danger")
-                        return
-                      }
-
-                      const updatedProjet = { ...projetFormData, intervenants: finalIntervenants, dateCreation: projets[selectedProjetIndex].dateCreation }
-                      const updatedList = [...projets]
-                      updatedList[selectedProjetIndex] = updatedProjet
-
-                      try {
-                        showToast("Mise à jour sur le serveur...", "info")
-                        const res = await apiCall('POST', '/projets', updatedProjet)
-
-                        if (res.status === 200) {
-                          setProjets(updatedList)
-                          safeStorage.setItem('gp_projets_v1', JSON.stringify(updatedList))
-                          setProjetView('projet')
-                          setProjetWizardStep(1)
-                          showToast('Projet mis à jour sur le serveur')
-                        } else {
-                          showToast("Échec de la mise à jour serveur", "danger")
-                        }
-                      } catch (e) {
-                        showToast(e.message, "danger")
-                      }
-                    }}>Enregistrer les modifications</button>
-                  </div>
-                )}
-              </div>
-            )}
-            {projetView === 'parametres' && (
-              <div className="glass-panel animate-slide-up" style={{ maxWidth: '700px', margin: '0 auto', padding: '3rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '3rem' }}>
-                  <button className="btn-icon" onClick={() => setProjetView('projet')}>←</button>
-                  <h2>Gestion des Accès (Projet)</h2>
-                </div>
-
-                <div style={{ background: 'var(--card-bg-light)', padding: '2rem', borderRadius: '16px', marginBottom: '3rem' }}>
-                  <h3 style={{ marginBottom: '1.5rem' }}>Créer un nouvel accès</h3>
-                  <form onSubmit={handleAccountCreate} className="form-grid" style={{ gap: '1.5rem' }}>
-                    <div style={{ gridColumn: 'span 2' }}>
-                      <label className="input-label">Email de connexion</label>
-                      <input type="email" className="glass-input" value={newAccountFormData.email} onChange={e => setNewAccountFormData({ ...newAccountFormData, email: e.target.value })} required placeholder="nom@entreprise.com" />
-                    </div>
-                    <div>
-                      <label className="input-label">Mot de passe</label>
-                      <input type="password" className="glass-input" value={newAccountFormData.password} onChange={e => setNewAccountFormData({ ...newAccountFormData, password: e.target.value })} required placeholder="••••••••" />
-                    </div>
-                    <div>
-                      <label className="input-label">Niveau d'accès</label>
-                      <select className="glass-input" value={newAccountFormData.role} onChange={e => setNewAccountFormData({ ...newAccountFormData, role: e.target.value })}>
-                        <option value="Super Admin">Super Administrateur (Accès Total)</option>
-                        <option value="Admin">Administrateur (Lecture & Écriture)</option>
-                        <option value="Visiteur">Visiteur (Lecture seule)</option>
-                      </select>
-                    </div>
-                    <div style={{ gridColumn: 'span 2', marginTop: '1rem' }}>
-                      <button type="submit" className="btn-primary" style={{ width: '100%', justifyContent: 'center' }}>Ajouter l'utilisateur</button>
-                    </div>
-                  </form>
-                </div>
-
-                <h3>Comptes Existants</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
-                  {[...PROJET_ACCOUNTS, ...accounts].map((acc, idx) => (
-                    <div key={idx} className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem' }}>
-                      <div>
-                        <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{acc.email}</div>
-                        <div style={{ fontSize: '0.85rem', color: acc.role === 'Admin' ? '#3b82f6' : 'var(--text-dim)' }}>Accès {acc.role}</div>
-                      </div>
-                      {acc.email !== currentUser.email && !PROJET_ACCOUNTS.some(pa => pa.email === acc.email) && (
-                        <button className="btn-icon" onClick={() => handleAccountDelete(acc.email)} style={{ color: 'var(--danger)' }}>🗑</button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : selectedHub === 'hse' ? (
-          <div className="animate-fade-in">
-            {/* Critical Alerts Section */}
-            {employees.some(e => e.certifications.some(c => {
-              const diff = new Date(c.dateExpiration) - new Date();
-              return diff > 0 && diff < (30 * 24 * 60 * 60 * 1000);
-            })) && (
-                <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', borderLeft: '4px solid var(--warning)', background: 'rgba(245, 158, 11, 0.05)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <span style={{ fontSize: '1.5rem' }}>⚠️</span>
-                    <div>
-                      <h3 style={{ fontSize: '0.9rem', color: 'var(--warning)', margin: 0 }}>Alertes Expirations Proches ( &lt; 30 jours )</h3>
-                      <p style={{ fontSize: '0.8rem', margin: '0.2rem 0 0' }}>Certains passeports nécessitent une mise à jour immédiate.</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-            {employeeView === 'list' ? (
-              <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
-                  <StatCard label="Effectif Total" value={employees.length} color="primary" />
-                  <StatCard label="Taux de Conformité" value={`${Math.round(employees.reduce((acc, e) => acc + e.compliance, 0) / (employees.length || 1))}%`} color="accent" />
-                  <StatCard label="Alertes Critiques" value={employees.filter(e => e.compliance < 60).length} color="danger" />
-                </div>
-
-                {/* Advanced Certification Analytics */}
-                <div className="glass-panel" style={{ padding: '2rem', marginBottom: '3rem', position: 'relative', border: '1px solid var(--border-glass)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                    <h3 style={{ fontSize: '1.1rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <span style={{ padding: '8px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: '10px' }}>📊</span>
-                      Distribution des Habilitations
-                    </h3>
-                    <div className="badge badge-info" style={{ fontSize: '0.6rem', letterSpacing: '1px' }}>Temps Réel</div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
-                    {CERTIFICATION_LIST.map(cert => {
-                      const count = employees.filter(e => e.certifications?.some(c => c.name === cert && !isExpired(c.dateExpiration) && c.attachment)).length;
-                      const percentage = employees.length > 0 ? Math.round((count / employees.length) * 100) : 0;
-                      return (
-                        <div key={cert} className="glass-card" style={{ background: 'rgba(255,255,255,0.02)', padding: '1.25rem', border: '1px solid rgba(255,255,255,0.03)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', alignItems: 'flex-start' }}>
-                            <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-secondary)', maxWidth: '140px', lineHeight: 1.2 }}>{cert}</span>
-                            <span style={{ fontSize: '1.1rem', fontWeight: '900', color: count > 0 ? 'var(--accent)' : 'var(--text-muted)' }}>{count}</span>
+                          <div>
+                            <label className="input-label">Commentaires et points de vigilance</label>
+                            <textarea className="glass-input" style={{ minHeight: '100px', resize: 'vertical' }} value={briefingFormData.commentaires} onChange={e => setBriefingFormData({ ...briefingFormData, commentaires: e.target.value })} placeholder="Notes additionnelles ou risques spécifiques..." />
                           </div>
-                          <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', overflow: 'hidden', position: 'relative' }}>
-                            <div
-                              style={{
-                                height: '100%',
-                                width: `${percentage}%`,
-                                background: percentage > 80 ? 'var(--accent)' : percentage > 40 ? 'var(--primary)' : 'var(--text-muted)',
-                                borderRadius: '10px',
-                                transition: 'width 1.5s ease-in-out'
-                              }}
-                            ></div>
-                          </div>
-                          <div style={{ textAlign: 'right', marginTop: '0.5rem', fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: '800' }}>{percentage}% COUVERTURE</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
 
-                <div className="glass-panel" style={{ padding: '2rem', border: '1px solid var(--border-glass)' }}>
-                  <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1.5rem' }}>
-                    <div>
-                      <h2 style={{ fontSize: '1.5rem', fontWeight: '900' }}>Répertoire du Personnel</h2>
-                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Gestion des dossiers et conformité individuelle</p>
-                    </div>
-                    <div className="controls-group" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                      <button className="btn-secondary" onClick={exportCSV}>📥 CSV</button>
-                      <select className="glass-input" style={{ width: '160px' }} value={filterDept} onChange={e => setFilterDept(e.target.value)}>
-                        <option value="Tous">Tous Depts</option>
-                        {[...new Set(employees.map(e => e.departement))].map(d => <option key={d} value={d}>{d}</option>)}
-                      </select>
-                      <input type="text" className="glass-input" placeholder="Rechercher..." style={{ width: '220px' }} value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                      {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
-                        <button className="btn-primary" onClick={() => { setFormData({ firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true, epis: { gants: { checked: false, date: '' }, chaussures: { checked: false, date: '' }, casques: { checked: false, date: '' }, uniforme: { checked: false, date: '' }, gillet: { checked: false, date: '' } } }); setEmployeeView('add') }}>+ Nouveau</button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {employees
-                      .filter(e => (filterDept === 'Tous' || e.departement === filterDept) && (e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.matricule.toLowerCase().includes(searchTerm.toLowerCase())))
-                      .map(e => <EmployeeRaw key={e.matricule} emp={e} />)}
-                  </div>
-                </div>
-              </>
-            ) : employeeView === 'settings' ? (
-              <div className="glass-panel animate-fade-in" style={{ maxWidth: '800px', margin: '0 auto', padding: '3rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '3rem' }}>
-                  <button className="btn-icon" onClick={() => setEmployeeView('list')}>←</button>
-                  <h2 style={{ margin: 0 }}>Contrôle des Accès</h2>
-                </div>
-
-                <div className="glass-card" style={{ padding: '2.5rem', marginBottom: '3rem', borderLeft: '4px solid var(--primary)' }}>
-                  <h3 style={{ marginBottom: '1.5rem', fontSize: '1.2rem' }}>Nouvel Utilisateur</h3>
-                  <form onSubmit={handleAccountCreate} className="form-grid" style={{ gap: '1.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
-                    <div style={{ gridColumn: 'span 2' }}>
-                      <label className="input-label">Email de connexion</label>
-                      <input type="email" className="glass-input" value={newAccountFormData.email} onChange={e => setNewAccountFormData({ ...newAccountFormData, email: e.target.value })} required placeholder="nom@madagreen-power.com" />
-                    </div>
-                    <div>
-                      <label className="input-label">Mot de passe</label>
-                      <input type="password" className="glass-input" value={newAccountFormData.password} onChange={e => setNewAccountFormData({ ...newAccountFormData, password: e.target.value })} required placeholder="••••••••" />
-                    </div>
-                    <div>
-                      <label className="input-label">Niveau d'accès</label>
-                      <select className="glass-input" value={newAccountFormData.role} onChange={e => setNewAccountFormData({ ...newAccountFormData, role: e.target.value })}>
-                        <option value="Super Admin">Super Administrateur</option>
-                        <option value="Admin">Administrateur</option>
-                        <option value="Visiteur">Visiteur (Lecture)</option>
-                      </select>
-                    </div>
-                    <div style={{ gridColumn: 'span 2', marginTop: '1rem' }}>
-                      <button type="submit" className="btn-primary" style={{ width: '100%', height: '50px' }}>Enregistrer l'accès</button>
-                    </div>
-                  </form>
-                </div>
-
-                <h3 style={{ marginBottom: '1.5rem', fontSize: '1.2rem' }}>Comptes Actifs</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {accounts.map((acc, idx) => (
-                    <div key={idx} className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 2rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>👤</div>
-                        <div>
-                          <div style={{ fontWeight: '800', color: 'var(--text-primary)' }}>{acc.email}</div>
-                          <div className={`badge ${acc.role === 'Super Admin' ? 'badge-danger' : (acc.role === 'Admin' ? 'badge-info' : 'badge-success')}`} style={{ marginTop: '0.25rem', display: 'inline-block' }}>{acc.role}</div>
-                        </div>
-                      </div>
-                      {acc.email !== currentUser.email && (
-                        <button className="btn-icon" onClick={() => handleAccountDelete(acc.email)} style={{ color: 'var(--danger)' }} title="Supprimer l'accès">🗑</button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (employeeView === 'add' || employeeView === 'edit') ? (
-              <div className="glass-panel animate-fade-in" style={{ maxWidth: '1000px', margin: '0 auto', padding: '3rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '3rem' }}>
-                  <button className="btn-icon" onClick={() => setEmployeeView('list')}>←</button>
-                  <h2 style={{ margin: 0 }}>{employeeView === 'add' ? "Nouveau Dossier Personnel" : "Mise à jour du Dossier"}</h2>
-                </div>
-
-                <form onSubmit={saveEmployee}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: '3rem' }}>
-                    {/* Sidebar: Photo & Status */}
-                    <div>
-                      <div
-                        className="glass-card"
-                        style={{ padding: '1rem', textAlign: 'center', cursor: 'pointer', border: '2px dashed var(--border-glass)' }}
-                        onClick={() => document.getElementById('file-up').click()}
-                      >
-                        <div style={{ width: '100%', aspectRatio: '1/1', borderRadius: '12px', overflow: 'hidden', background: 'var(--bg-main)', marginBottom: '1rem' }}>
-                          <img src={formData.avatar || avatarPlaceholder} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Avatar" />
-                        </div>
-                        <div className="btn-secondary" style={{ width: '100%', padding: '0.5rem', fontSize: '0.8rem' }}>Changer la photo</div>
-                        <input type="file" id="file-up" hidden onChange={handleFileChange} />
-                      </div>
-
-                      <div className="glass-card" style={{ marginTop: '1.5rem', padding: '1.5rem', borderLeft: `4px solid ${formData.aptitudeMedicale ? 'var(--accent)' : 'var(--danger)'}` }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                          <input
-                            type="checkbox"
-                            id="apt-med"
-                            checked={formData.aptitudeMedicale}
-                            onChange={e => setFormData({ ...formData, aptitudeMedicale: e.target.checked })}
-                            style={{ width: '20px', height: '20px' }}
-                          />
-                          <label htmlFor="apt-med" style={{ fontWeight: '800', fontSize: '0.9rem' }}>Aptitude Médicale</label>
-                        </div>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                          {formData.aptitudeMedicale ? 'Certificat médical valide fourni.' : 'Aptitude non confirmée.'}
-                        </p>
-                      </div>
-
-                      {/* Signature Upload */}
-                      <div className="glass-card" style={{ marginTop: '1.5rem', padding: '1.5rem', borderLeft: '4px solid var(--info)' }}>
-                        <h4 style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--info)', textTransform: 'uppercase', letterSpacing: '1px' }}>✍️ Signature</h4>
-                        {formData.signature ? (
-                          <div style={{ marginBottom: '1rem', background: '#fff', borderRadius: '8px', padding: '0.5rem', border: '1px solid var(--border-glass)' }}>
-                            <img src={formData.signature} alt="Signature" style={{ width: '100%', maxHeight: '80px', objectFit: 'contain' }} />
-                          </div>
-                        ) : (
-                          <div style={{ height: '60px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px dashed var(--border-glass)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem' }}>
-                            <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Aucune signature déposée</span>
-                          </div>
-                        )}
-                        <label htmlFor="sig-up" className="btn-secondary" style={{ width: '100%', display: 'block', textAlign: 'center', cursor: 'pointer', padding: '0.5rem', fontSize: '0.8rem' }}>
-                          {formData.signature ? '🔄 Remplacer la signature' : '📤 Déposer une signature'}
-                        </label>
-                        <input type="file" id="sig-up" hidden accept="image/*" onChange={handleSignatureChange} />
-                        {formData.signature && (
-                          <button type="button" style={{ marginTop: '0.5rem', width: '100%', background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '0.75rem' }} onClick={() => setFormData(prev => ({ ...prev, signature: null }))}>Supprimer la signature</button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Main Content: Info & Certs */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                      <div className="glass-card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                        <div style={{ gridColumn: 'span 2' }}><h3 style={{ fontSize: '1rem', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '1px' }}>Informations Générales</h3></div>
-                        <div><label className="input-label">Nom</label><input type="text" name="lastName" className="glass-input" value={formData.lastName} onChange={handleFormChange} required /></div>
-                        <div><label className="input-label">Prénom</label><input type="text" name="firstName" className="glass-input" value={formData.firstName} onChange={handleFormChange} required /></div>
-                        <div><label className="input-label">Département</label><input type="text" name="departement" className="glass-input" value={formData.departement} onChange={handleFormChange} required /></div>
-                        <div><label className="input-label">Fonction</label><input type="text" name="role" className="glass-input" value={formData.role} onChange={handleFormChange} required /></div>
-                        <div><label className="input-label">Matricule</label><input type="text" name="matricule" className="glass-input" value={formData.matricule} onChange={handleFormChange} placeholder="AUTO-GENÉRÉ" disabled={employeeView === 'edit'} /></div>
-                      </div>
-
-                      <div className="glass-card">
-                        <h3 style={{ fontSize: '1rem', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1.5rem' }}>Équipements (EPI)</h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-                          {['gants', 'chaussures', 'casques', 'uniforme', 'gillet'].map(key => (
-                            <div key={key} style={{ padding: '1rem', background: 'var(--bg-main)', borderRadius: '12px', border: formData.epis[key].checked ? '1px solid var(--accent-glow)' : '1px solid transparent' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                                <input
-                                  type="checkbox"
-                                  checked={formData.epis[key].checked}
-                                  onChange={e => setFormData(pr => ({ ...pr, epis: { ...pr.epis, [key]: { ...pr.epis[key], checked: e.target.checked } } }))}
-                                />
-                                <span style={{ fontSize: '0.8rem', fontWeight: '700' }}>{key.charAt(0).toUpperCase() + key.slice(1)}</span>
-                              </div>
-                              {formData.epis[key].checked && (
-                                <input
-                                  type="date"
-                                  className="glass-input"
-                                  style={{ padding: '0.3rem', fontSize: '0.75rem' }}
-                                  value={formData.epis[key].date}
-                                  onChange={e => setFormData(pr => ({ ...pr, epis: { ...pr.epis, [key]: { ...pr.epis[key], date: e.target.value } } }))}
-                                />
+                          <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1rem' }}>
+                            <label className="input-label">Intervenants Présents ({briefingFormData.intervenants.length})</label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '300px', overflowY: 'auto', marginBottom: '1rem' }}>
+                              {briefingFormData.intervenants.map((intv, i) => (
+                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: '0.5rem 0.8rem', borderRadius: '8px', fontSize: '0.85rem' }}>
+                                  <span>{intv.name}</span>
+                                  <button style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }} onClick={() => setBriefingFormData({ ...briefingFormData, intervenants: briefingFormData.intervenants.filter((_, idx) => idx !== i) })}>✕</button>
+                                </div>
+                              ))}
+                            </div>
+                            <div style={{ position: 'relative' }}>
+                              <input type="text" className="glass-input" placeholder="Ajouter un intervenant..." value={intervenantSearch} onChange={e => setIntervenantSearch(e.target.value)} />
+                              {intervenantSearch.trim().length > 0 && (
+                                <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, zIndex: 10, background: '#1e293b', border: '1px solid var(--border-glass)', borderRadius: '12px', marginBottom: '5px', maxHeight: '200px', overflowY: 'auto', boxShadow: '0 -10px 25px rgba(0,0,0,0.3)' }}>
+                                  {employees.filter(emp => !briefingFormData.intervenants.some(intv => intv.matricule === emp.matricule)).filter(emp => emp.name.toLowerCase().includes(intervenantSearch.toLowerCase())).map(emp => (
+                                    <div key={emp.matricule} onClick={() => { setBriefingFormData({ ...briefingFormData, intervenants: [...briefingFormData.intervenants, { matricule: emp.matricule, name: emp.name, role: emp.role }] }); setIntervenantSearch('') }} style={{ padding: '0.8rem 1rem', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                      <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{emp.name}</div>
+                                    </div>
+                                  ))}
+                                </div>
                               )}
                             </div>
-                          ))}
+                          </div>
+
+                          <button className="btn-primary" style={{ width: '100%', marginTop: '1rem' }} onClick={async () => {
+                            if (!isOnline) { showToast("Connexion internet requise", "danger"); return; }
+                            let updatedBriefings = [...(projetFormData.briefings || [])];
+                            if (selectedBriefingIndex !== null) {
+                              updatedBriefings[selectedBriefingIndex] = briefingFormData;
+                            } else {
+                              updatedBriefings.unshift(briefingFormData);
+                            }
+
+                            const updatedProj = {
+                              ...projetFormData,
+                              intervenants: projetIntervenants,
+                              dateCreation: projets[selectedProjetIndex]?.dateCreation || new Date().toLocaleDateString('fr-FR'),
+                              briefings: updatedBriefings
+                            };
+                            try {
+                              showToast("Enregistrement...", "info");
+                              const res = await apiCall('POST', '/projets', updatedProj);
+                              if (res.status === 200) {
+                                const newList = [...projets];
+                                newList[selectedProjetIndex] = updatedProj;
+                                setProjets(newList);
+                                safeStorage.setItem('gp_projets_v1', JSON.stringify(newList));
+                                setProjetFormData(updatedProj);
+                                showToast("Briefing enregistré !");
+                                addNotification("Safety Briefing", `Un nouveau briefing a été enregistré pour le chantier "${projetFormData.nomChantier}"`, "info");
+                                setProjetView('detailProjet');
+                              }
+                            } catch (e) { showToast(e.message, "danger"); }
+                          }}>💾 Enregistrer le Briefing</button>
                         </div>
                       </div>
 
-                      <div className="glass-card">
-                        <h3 style={{ fontSize: '1rem', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1.5rem' }}>Certifications HSE</h3>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.5rem' }}>
-                          {formData.certifications.map((c, i) => (
-                            <div key={i} className="badge badge-info" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}>
-                              <span>{c.name} ({c.dateExpiration})</span>
-                              <button type="button" onClick={() => setFormData(f => ({ ...f, certifications: f.certifications.filter((_, idx) => idx !== i) }))} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
+                      {/* Preview Side */}
+                      <div style={{ position: 'relative' }}>
+                        <div style={{ position: 'absolute', top: '-50px', right: 0 }}>
+                          <button className="btn-primary" onClick={async () => {
+                            try {
+                              showToast("Génération du document A4...", "info");
+                              const page1 = document.getElementById('sb-page-1');
+                              const page2 = document.getElementById('sb-page-2');
+
+                              // Wait for all images to fully load before capture
+                              const waitForImages = (el) => {
+                                const imgs = Array.from(el.querySelectorAll('img'));
+                                return Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(resolve => { img.onload = resolve; img.onerror = resolve; })));
+                              };
+                              await Promise.all([waitForImages(page1), waitForImages(page2)]);
+
+                              const captureOptions = { scale: 2, useCORS: true, allowTaint: true, logging: false, imageTimeout: 5000, backgroundColor: '#ffffff' };
+                              const canvas1 = await html2canvas(page1, captureOptions);
+                              const canvas2 = await html2canvas(page2, captureOptions);
+
+                              const pdf = new jsPDF('p', 'mm', 'a4');
+                              const pdfWidth = pdf.internal.pageSize.getWidth();
+                              const pdfHeight = pdf.internal.pageSize.getHeight();
+
+                              const img1 = canvas1.toDataURL('image/png');
+                              const img2 = canvas2.toDataURL('image/png');
+
+                              pdf.addImage(img1, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                              pdf.addPage();
+                              pdf.addImage(img2, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+                              pdf.save(`Safety_Briefing_${projetFormData.nomChantier}_${briefingFormData.date}.pdf`);
+                              showToast(`Document PDF (2 pages) généré !`);
+                            } catch (err) { showToast("Erreur PDF: " + err.message, "danger"); }
+                          }}>🖨️ Imprimer / PDF A4</button>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
+                          {/* PAGE 1 */}
+                          <div id="sb-page-1" style={{
+                            background: 'white',
+                            color: 'black',
+                            padding: '15mm',
+                            height: '297mm',
+                            width: '210mm',
+                            margin: '0 auto',
+                            fontFamily: '"Segoe UI", Arial, sans-serif',
+                            boxSizing: 'border-box',
+                            display: 'flex',
+                            flexDirection: 'column'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', borderBottom: '2px solid #002060', paddingBottom: '10px' }}>
+                              <img src={logo} alt="Logo" style={{ height: '50px' }} />
+                              <h1 style={{ margin: 0, color: '#002060', fontSize: '24px', fontWeight: '800' }}>Safety Briefing Chantier</h1>
                             </div>
-                          ))}
-                        </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '1rem', alignItems: 'end', background: 'var(--bg-main)', padding: '1.5rem', borderRadius: '12px' }}>
-                          <div><label className="input-label">Type</label><select className="glass-input" value={draftCert.name} onChange={e => setDraftCert(d => ({ ...d, name: e.target.value }))}><option value="">Sélectionner...</option>{CERTIFICATION_LIST.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-                          <div><label className="input-label">Date</label><input type="date" className="glass-input" value={draftCert.dateObtention} onChange={e => setDraftCert(d => ({ ...d, dateObtention: e.target.value }))} /></div>
-                          <div><label className="input-label">Validité</label><input type="number" className="glass-input" value={draftCert.validite} onChange={e => setDraftCert(d => ({ ...d, validite: e.target.value }))} placeholder="Ans" /></div>
-                          <button type="button" className="btn-primary" onClick={addCert} style={{ height: '46px' }}>Ajouter</button>
+                            {/* Main Info Table */}
+                            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '30px' }}>
+                              <thead>
+                                <tr style={{ background: '#002060', color: 'white' }}>
+                                  <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>PM Responsable Site</th>
+                                  <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Date</th>
+                                  <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Briefing</th>
+                                  <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Chantier</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr>
+                                  <td style={{ border: '1px solid #333', padding: '12px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px' }}>{briefingFormData.responsable}</td>
+                                  <td style={{ border: '1px solid #333', padding: '12px', textAlign: 'center', fontSize: '12px' }}>{new Date(briefingFormData.date).toLocaleDateString('fr-FR')}</td>
+                                  <td style={{ border: '1px solid #333', padding: '12px', textAlign: 'center', fontSize: '12px' }}>{briefingFormData.topic}</td>
+                                  <td style={{ border: '1px solid #333', padding: '12px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px' }}>{projetFormData.nomChantier}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+
+                            {/* Participants Table */}
+                            <div style={{ marginBottom: '10px', fontWeight: '900', fontSize: '13px', color: '#002060', textTransform: 'uppercase' }}>LISTE DES PARTICIPANTS</div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', flex: 1 }}>
+                              <thead>
+                                <tr style={{ background: '#002060', color: 'white' }}>
+                                  <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Fonction</th>
+                                  <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Nom</th>
+                                  <th style={{ border: '1px solid #002060', padding: '10px', fontSize: '11px' }}>Signature</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {briefingFormData.intervenants.slice(0, 18).map((intv, idx) => (
+                                  <tr key={idx}>
+                                    <td style={{ border: '1px solid #333', padding: '8px', fontSize: '11px' }}>{intv.role}</td>
+                                    <td style={{ border: '1px solid #333', padding: '8px', fontSize: '11px', fontWeight: 'bold' }}>{intv.name}</td>
+                                    <td style={{ border: '1px solid #333', padding: '4px', height: '50px', textAlign: 'center', verticalAlign: 'middle' }}>
+                                      {(() => {
+                                        const emp = employees.find(e => e.name === intv.name);
+                                        return emp?.signature
+                                          ? <img src={emp.signature} alt="Signature" style={{ maxHeight: '45px', maxWidth: '150px', objectFit: 'contain', display: 'block', margin: '0 auto' }} />
+                                          : null;
+                                      })()}
+                                    </td>
+                                  </tr>
+                                ))}
+                                {[...Array(Math.max(0, 18 - briefingFormData.intervenants.length))].map((_, i) => (
+                                  <tr key={`empty-${i}`}>
+                                    <td style={{ border: '1px solid #333', padding: '15px' }}></td>
+                                    <td style={{ border: '1px solid #333', padding: '15px' }}></td>
+                                    <td style={{ border: '1px solid #333', padding: '15px' }}></td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            <div style={{ marginTop: '10px', fontSize: '9px', color: '#999', textAlign: 'center' }}>Page 1 / 2</div>
+                          </div>
+
+                          {/* PAGE 2 */}
+                          <div id="sb-page-2" style={{
+                            background: 'white',
+                            color: 'black',
+                            padding: '15mm',
+                            height: '297mm',
+                            width: '210mm',
+                            margin: '0 auto',
+                            fontFamily: '"Segoe UI", Arial, sans-serif',
+                            boxSizing: 'border-box'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', borderBottom: '2px solid #002060', paddingBottom: '10px' }}>
+                              <img src={logo} alt="Logo" style={{ height: '50px' }} />
+                              <h1 style={{ margin: 0, color: '#002060', fontSize: '24px', fontWeight: '800' }}>Safety Briefing Chantier</h1>
+                            </div>
+
+                            {/* Description Section */}
+                            <div style={{ marginBottom: '25px' }}>
+                              <div style={{ background: '#002060', color: 'white', padding: '10px', fontSize: '11px', fontWeight: 'bold', textAlign: 'center', border: '1px solid #002060', textTransform: 'uppercase' }}>
+                                Description des points et consignes évoquées
+                              </div>
+                              <div style={{ border: '1px solid #333', borderTop: 'none', padding: '20px', minHeight: '150px', fontSize: '12px', lineHeight: '1.6', color: '#333', whiteSpace: 'pre-wrap' }}>
+                                {briefingFormData.description || "Aucun commentaire spécifique."}
+                              </div>
+                            </div>
+
+                            {/* Comments Section */}
+                            <div style={{ marginBottom: '25px' }}>
+                              <div style={{ background: '#002060', color: 'white', padding: '10px', fontSize: '11px', fontWeight: 'bold', textAlign: 'center', border: '1px solid #002060', textTransform: 'uppercase' }}>
+                                Commentaires et points de vigilance
+                              </div>
+                              <div style={{ border: '1px solid #333', borderTop: 'none', padding: '20px', minHeight: '120px', fontSize: '12px', lineHeight: '1.6', color: '#333', whiteSpace: 'pre-wrap' }}>
+                                {briefingFormData.commentaires || "Aucun commentaire spécifique."}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
-                  <div style={{ marginTop: '3rem', display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                    <button type="button" className="btn-secondary" onClick={() => setEmployeeView('list')}>Annuler</button>
-                    <button type="submit" className="btn-primary" style={{ minWidth: '200px' }}>{employeeView === 'edit' ? "Mettre à jour le dossier" : "Créer le profil"}</button>
-                  </div>
-                </form>
-              </div>
-            ) : employeeView === 'badge' ? (
-              <section className="animate-fade-in" style={{ width: '100%', maxWidth: '800px', margin: '0 auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                <div className="glass-panel profile-main" style={{ position: 'relative', padding: '1.5rem', width: '100%' }}>
-                  <button className="btn-icon" style={{ position: 'absolute', top: '1rem', right: '1rem', zIndex: 10 }} onClick={() => setEmployeeView('list')}>✕</button>
-                  <div className="profile-header" style={{ display: 'flex', gap: '2rem', alignItems: 'center', marginBottom: '3rem', padding: '1rem' }}>
-                    <div className="profile-image-wrapper" style={{ flexShrink: 0, width: '120px', height: '140px', borderRadius: '16px', overflow: 'hidden', border: '3px solid var(--primary-glow)', boxShadow: '0 10px 20px rgba(0,0,0,0.2)' }}>
-                      <img src={selectedEmployee.avatar || avatarPlaceholder} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Avatar" />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <h1 style={{ marginBottom: '0.25rem', fontSize: '1.8rem' }}>{selectedEmployee.firstName}<br />{selectedEmployee.lastName?.toUpperCase()}</h1>
-                      <p style={{ fontSize: '1.1rem', color: 'var(--primary)', fontWeight: '600', marginBottom: '0.5rem' }}>{selectedEmployee.role}</p>
-                      <div className="id-badge" style={{ display: 'inline-block', background: 'var(--primary-glow)', padding: '4px 12px', borderRadius: '8px', fontSize: '0.8rem', fontFamily: 'monospace', fontWeight: 'bold', color: 'var(--primary)' }}>{selectedEmployee.matricule}</div>
-                    </div>
-                  </div>
+                  {projetView === 'editProjet' && selectedProjetIndex !== null && (
+                    <div className="glass-panel animate-slide-up" style={{ maxWidth: '600px', margin: '0 auto', padding: '3rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                        <button className="btn-icon" onClick={() => {
+                          if (projetWizardStep > 1) {
+                            setProjetWizardStep(projetWizardStep - 1)
+                          } else {
+                            setProjetView('projet');
+                            setProjetWizardStep(1);
+                          }
+                        }}>{"<"}</button>
+                        <h2>Modifier le Projet</h2>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem' }}>
+                        <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: 'var(--primary)' }}></div>
+                        <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: projetWizardStep >= 2 ? 'var(--primary)' : 'rgba(255,255,255,0.1)' }}></div>
+                        <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: projetWizardStep >= 3 ? 'var(--primary)' : 'rgba(255,255,255,0.1)' }}></div>
+                      </div>
 
-                  <div className="badge-stats-grid">
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '1.5rem', fontWeight: '800', color: selectedEmployee.compliance >= 90 ? 'var(--accent)' : 'var(--warning)' }}>{selectedEmployee.compliance}%</div>
-                      <div className="input-label">Score HSE</div>
-                    </div>
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '1.5rem', fontWeight: '800' }}>{selectedEmployee.certifications.length}</div>
-                      <div className="input-label">Certifications</div>
-                    </div>
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '1.5rem', fontWeight: '800', color: selectedEmployee.status === 'Actif' ? 'var(--accent)' : 'var(--danger)' }}>{selectedEmployee.status}</div>
-                      <div className="input-label">État</div>
-                    </div>
-                  </div>
-
-                  <div style={{ background: 'var(--card-bg-medium)', padding: '1.5rem', borderRadius: '12px', textAlign: 'center', border: selectedEmployee.aptitudeMedicale ?? true ? '2px solid var(--accent-glow)' : '2px solid var(--danger-glow)' }}>
-                    <div style={{ fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '2px', color: 'var(--text-dim)', marginBottom: '0.5rem' }}>Aptitude Médicale Officielle</div>
-                    <div style={{ fontSize: '1.8rem', fontWeight: '900', color: selectedEmployee.aptitudeMedicale ?? true ? 'var(--accent)' : 'var(--danger)' }}>
-                      {selectedEmployee.aptitudeMedicale ?? true ? '✅ APTE' : '❌ INAPTE'}
-                    </div>
-                  </div>
-
-                  <h3 style={{ marginBottom: '1.5rem', fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '2px' }}>Registre des Formations</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {selectedEmployee.certifications.length > 0 ? selectedEmployee.certifications.map((c, i) => (
-                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg-medium)', padding: '1rem', borderRadius: '12px', borderLeft: `4px solid ${isExpired(c.dateExpiration) ? 'var(--danger)' : ((new Date(c.dateExpiration) - new Date()) < (30 * 24 * 60 * 60 * 1000) ? 'var(--warning)' : 'var(--accent)')}` }}>
-                        <div>
-                          <div style={{ fontWeight: '700' }}>{c.name}</div>
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Délivré le {c.dateObtention}</div>
+                      {projetWizardStep === 1 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                          <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Etape 1/3 - Informations du projet</p>
+                          <div><label className="input-label">Nom du Chantier</label><input type="text" className="glass-input" value={projetFormData.nomChantier} onChange={e => setProjetFormData({ ...projetFormData, nomChantier: e.target.value })} /></div>
+                          <div><label className="input-label">Lieu</label><input type="text" className="glass-input" value={projetFormData.lieu} onChange={e => setProjetFormData({ ...projetFormData, lieu: e.target.value })} /></div>
+                          <div><label className="input-label">Date de début</label><input type="date" className="glass-input" value={projetFormData.dateDebut} onChange={e => setProjetFormData({ ...projetFormData, dateDebut: e.target.value })} /></div>
+                          <button type="button" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} disabled={!projetFormData.nomChantier || !projetFormData.lieu || !projetFormData.dateDebut} onClick={() => setProjetWizardStep(2)}>Suivant →</button>
                         </div>
-                        <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                          {c.attachment && (
-                            <button className="btn-icon" onClick={() => viewAttachment(c.attachment)} style={{ background: 'var(--primary-glow)', color: 'var(--primary)', padding: '8px', borderRadius: '10px' }} title="Voir la pièce jointe">📎</button>
-                          )}
+                      )}
+
+                      {projetWizardStep === 2 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                          <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Etape 2/3 - Responsable et Intervenants</p>
                           <div>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-                              {(new Date(c.dateExpiration) - new Date()) < (30 * 24 * 60 * 60 * 1000) && !isExpired(c.dateExpiration) ? <span style={{ color: 'var(--warning)', fontWeight: '800' }}>BIENTÔT EXPIRED! </span> : null}
-                              {isExpired(c.dateExpiration) ? <span style={{ color: 'var(--danger)', fontWeight: '800' }}>EXPIRED! </span> : 'Expiration'}
-                            </div>
-                            <div style={{ fontWeight: '700', color: isExpired(c.dateExpiration) ? 'var(--danger)' : 'var(--text-main)' }}>{c.dateExpiration}</div>
+                            <label className="input-label">Responsable Chantier (HSE Passport)</label>
+                            <select className="glass-input" value={projetFormData.responsableChantier} onChange={e => setProjetFormData({ ...projetFormData, responsableChantier: e.target.value })}>
+                              <option value="">Selectionner le responsable...</option>
+                              {employees.map(emp => (<option key={emp.matricule} value={emp.name}>{emp.name}</option>))}
+                            </select>
                           </div>
-                        </div>
-                      </div>
-                    )) : <p>Aucun certificat enregistré.</p>}
-                  </div>
-
-                  <div className="form-actions" style={{ marginTop: '2.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', width: '100%' }}>
-                    <button className="btn-primary" style={{ width: '100%', maxWidth: '300px', justifyContent: 'center', padding: '1.2rem' }} onClick={printBadge}>
-                      ⎙ Imprimer le Badge PDF
-                    </button>
-                    {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
-                      <button className="btn-secondary" style={{ width: '100%', maxWidth: '300px', justifyContent: 'center', padding: '1.2rem' }} onClick={() => startEdit(selectedEmployee)}>
-                        ✎ Modifier le dossier
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="sidebar animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                  <div className="glass-panel" style={{ padding: '2rem' }}>
-                    <h3 style={{ fontSize: '1rem', marginBottom: '1.5rem' }}>Aperçu Technique</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                      <div className="security-meter">
-                        <div className="meter-fill" style={{ width: `${selectedEmployee.compliance}%`, background: selectedEmployee.compliance >= 90 ? 'var(--accent)' : 'var(--danger)' }}></div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="glass-panel" style={{ padding: '2rem' }}>
-                    <h3 style={{ fontSize: '1rem', marginBottom: '1.5rem' }}>EPI Fournis</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                      {[
-                        { key: 'gants', label: 'Gants' },
-                        { key: 'chaussures', label: 'Chaussures Sécu' },
-                        { key: 'casques', label: 'Casque' },
-                        { key: 'uniforme', label: 'Uniforme Manche L.' },
-                        { key: 'gillet', label: 'Gilet Coton' }
-                      ].map(({ key, label }) => {
-                        const epiData = selectedEmployee.epis?.[key] || { checked: false, date: '' };
-                        return (
-                          <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                            <span style={{ color: epiData.checked ? 'var(--text-main)' : 'var(--text-dim)', fontWeight: epiData.checked ? 'bold' : 'normal' }}>{label}</span>
-                            {epiData.checked ? (
-                              <span style={{ fontSize: '0.8rem', color: 'var(--accent)', background: 'var(--accent-glow)', padding: '2px 8px', borderRadius: '4px' }}>{epiData.date ? epiData.date : 'Doté'}</span>
-                            ) : (
-                              <span style={{ fontSize: '0.8rem', color: 'var(--danger)', opacity: 0.5 }}>NON</span>
+                          <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+                            <label className="input-label">Intervenants ({projetIntervenants.length})</label>
+                            {projetIntervenants.length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+                                {projetIntervenants.map((intv, i) => (
+                                  <span key={i} style={{ background: 'var(--primary-glow)', color: 'var(--primary)', padding: '0.3rem 0.8rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    {intv.name}
+                                    <span style={{ cursor: 'pointer', opacity: 0.7 }} onClick={() => setProjetIntervenants(prev => prev.filter((_, idx) => idx !== i))}>x</span>
+                                  </span>
+                                ))}
+                              </div>
                             )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  <div style={{ position: 'fixed', left: '-100vw', top: 0, opacity: 0, pointerEvents: 'none' }}>
-                    <div id="pdf-badge-wrapper" style={{ padding: '40px', background: 'white', display: 'flex', flexDirection: 'column', gap: '40px' }}>
-
-                      {/* Recto CR80: 54x86mm */}
-                      <div id="badge-recto" style={{ width: '54mm', height: '86mm', borderRadius: '4mm', border: '0.5px solid #e2e8f0', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#ffffff', position: 'relative', boxSizing: 'border-box', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
-
-                        {/* Professional Header */}
-                        <div style={{ background: '#1e40af', height: '18mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'white', position: 'relative', zIndex: 10 }}>
-                          <img src={logo} alt="" style={{ height: '7mm', marginBottom: '1mm', filter: 'brightness(0) invert(1)' }} />
-                          <div style={{ fontSize: '7pt', fontWeight: '800', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Passeport Sécurité</div>
-                        </div>
-
-                        {/* Photo Section */}
-                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '4mm', position: 'relative', zIndex: 10 }}>
-                          <div style={{ width: '25mm', height: '30mm', borderRadius: '2mm', overflow: 'hidden', border: '2px solid #1e40af', background: '#f8fafc' }}>
-                            <img src={selectedEmployee.avatar || avatarPlaceholder} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          </div>
-                        </div>
-
-                        {/* Info Section */}
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '3mm', gap: '2mm', zIndex: 10 }}>
-                          <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: '10pt', fontWeight: '900', color: '#0f172a', lineHeight: '1.1' }}>{selectedEmployee.firstName}</div>
-                            <div style={{ fontSize: '12pt', fontWeight: '900', color: '#0f172a', textTransform: 'uppercase', lineHeight: '1.1' }}>{selectedEmployee.lastName}</div>
-                          </div>
-
-                          <div style={{ background: '#f1f5f9', width: '100%', padding: '1.5mm', borderRadius: '1mm', textAlign: 'center' }}>
-                            <div style={{ fontSize: '6pt', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.5mm' }}>Fonction</div>
-                            <div style={{ fontSize: '8pt', color: '#1e40af', fontWeight: '800' }}>{selectedEmployee.role}</div>
-                          </div>
-
-                          <div style={{ background: '#f1f5f9', width: '100%', padding: '1.5rem', borderRadius: '1mm', textAlign: 'center' }}>
-                            <div style={{ fontSize: '6pt', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.5rem' }}>MATRICULE</div>
-                            <div style={{ fontSize: '10pt', fontWeight: '900', color: '#0f172a' }}>{selectedEmployee.matricule}</div>
-                          </div>
-                        </div>
-
-                        {/* Footer Bar */}
-                        <div style={{ background: selectedEmployee.compliance >= 90 ? '#10b981' : (selectedEmployee.compliance >= 60 ? '#f59e0b' : '#ef4444'), height: '1.5mm', width: '100%' }}></div>
-                      </div>
-
-                      {/* Verso CR80: 54x86mm */}
-                      <div id="badge-verso" style={{ width: '54mm', height: '86mm', borderRadius: '4mm', border: '0.5px solid #e2e8f0', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#ffffff', position: 'relative', boxSizing: 'border-box', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
-
-                        {/* Watermark Logo */}
-                        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', opacity: 0.05, width: '40mm', zIndex: 0, pointerEvents: 'none' }}>
-                          <img src={logo} alt="" style={{ width: '100%' }} />
-                        </div>
-
-                        <div style={{ background: '#334155', color: 'white', padding: '2mm', textAlign: 'center', fontSize: '7pt', fontWeight: '800', textTransform: 'uppercase', position: 'relative', zIndex: 1 }}>
-                          Habilitations
-                        </div>
-
-                        <div style={{ flex: 1, padding: '3mm', display: 'flex', flexDirection: 'column', gap: '1.5mm', position: 'relative', zIndex: 1 }}>
-                          {/* Medical Aptitude Section Moved to Verso */}
-                          <div style={{ background: selectedEmployee.aptitudeMedicale !== false ? '#dcfce7' : '#fee2e2', padding: '2mm', borderRadius: '1.5mm', border: '1px solid ' + (selectedEmployee.aptitudeMedicale !== false ? '#86efac' : '#fca5a5'), textAlign: 'center', marginBottom: '1mm' }}>
-                            <div style={{ fontSize: '5.5pt', color: selectedEmployee.aptitudeMedicale !== false ? '#166534' : '#991b1b', fontWeight: '800', textTransform: 'uppercase', marginBottom: '0.5mm' }}>Aptitude Médicale</div>
-                            <div style={{ fontSize: '9pt', fontWeight: '900', color: selectedEmployee.aptitudeMedicale !== false ? '#15803d' : '#b91c1c' }}>{selectedEmployee.aptitudeMedicale !== false ? 'CONFORME' : 'NON CONFORME'}</div>
-                          </div>
-
-                          <div style={{ fontSize: '6pt', fontWeight: '900', color: '#64748b', borderBottom: '1px solid #e2e8f0', paddingBottom: '1mm', marginBottom: '1mm' }}>HABILITATION / EXPIRATION</div>
-
-                          <div style={{ flex: 1, overflow: 'hidden' }}>
-                            {selectedEmployee.certifications.length > 0 ? (
-                              selectedEmployee.certifications.slice(0, 6).map((c, i) => (
-                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.2mm 0', borderBottom: '0.5px solid #f1f5f9' }}>
-                                  <div style={{ fontSize: '6.5pt', fontWeight: '700', color: '#1e293b', width: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-                                  <div style={{ fontSize: '6.5pt', fontWeight: '800', color: isExpired(c.dateExpiration) ? '#ef4444' : '#1e293b' }}>{c.dateExpiration.replace(/-/g, '/')}</div>
+                            <div style={{ position: 'relative' }}>
+                              <input type="text" className="glass-input" placeholder="Ajouter des intervenants..." value={intervenantSearch} onChange={e => setIntervenantSearch(e.target.value)} />
+                              {intervenantSearch.trim().length > 0 && (
+                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, background: 'var(--bg-deep)', border: '1px solid var(--glass-border)', borderRadius: '12px', marginTop: '5px', maxHeight: '200px', overflowY: 'auto', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+                                  {employees.filter(emp => !projetIntervenants.some(intv => intv.matricule === emp.matricule)).filter(emp => emp.name.toLowerCase().includes(intervenantSearch.toLowerCase()) || emp.matricule.toLowerCase().includes(intervenantSearch.toLowerCase())).map(emp => (
+                                    <div key={emp.matricule} onClick={() => { setProjetIntervenants(prev => [...prev, { matricule: emp.matricule, name: emp.name, role: emp.role }]); setIntervenantSearch('') }} style={{ padding: '0.8rem 1rem', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                      <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{emp.name}</div>
+                                      <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>{emp.role}</div>
+                                    </div>
+                                  ))}
                                 </div>
-                              ))
-                            ) : (
-                              <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '7pt', marginTop: '5mm', fontStyle: 'italic' }}>Aucune habilitation</div>
+                              )}
+                            </div>
+                          </div>
+                          <button type="button" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} disabled={!projetFormData.responsableChantier} onClick={() => setProjetWizardStep(3)}>Suivant (Materiels) →</button>
+                        </div>
+                      )}
+
+                      {projetWizardStep === 3 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                          <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem', margin: 0 }}>Etape 3/3 - Materiels et EPC</p>
+                          <div>
+                            <label className="input-label">Outillage (Selection Caisse)</label>
+                            <select className="glass-input" value={projetFormData.outillageCaisse} onChange={e => setProjetFormData({ ...projetFormData, outillageCaisse: e.target.value })}>
+                              <option value="">Aucune caisse assignee...</option>
+                              {caisses.map(c => (<option key={c.numeroCaisse} value={c.numeroCaisse}>{c.numeroCaisse} - {c.affecterA}</option>))}
+                            </select>
+                          </div>
+                          <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+                            <label className="input-label">Check-list EPC</label>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
+                              {[{ key: 'extincteurs', label: 'Extincteurs' }, { key: 'balisage', label: 'Balisage' }, { key: 'echafaudage', label: 'Echafaudage' }, { key: 'gardecorps', label: 'Garde-corps' }, { key: 'lignedevie', label: 'Lignes de vie' }, { key: 'eclairage', label: 'Eclairage' }, { key: 'kitantipollution', label: 'Anti-pollution' }].map(({ key, label }) => (
+                                <div key={key} onClick={() => setProjetFormData({ ...projetFormData, epc: { ...projetFormData.epc, [key]: !projetFormData.epc?.[key] } })} style={{ background: 'var(--card-bg-light)', padding: '0.75rem', borderRadius: '10px', cursor: 'pointer', border: projetFormData.epc?.[key] ? '1px solid var(--accent)' : '1px solid transparent', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.3s' }}>
+                                  <input type="checkbox" checked={projetFormData.epc?.[key] || false} onChange={() => { }} style={{ width: '16px', height: '16px' }} />
+                                  <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>{label}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <button type="button" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }} onClick={async () => {
+                            const manager = employees.find(e => e.name === projetFormData.responsableChantier);
+                            let finalIntervenants = [...projetIntervenants];
+                            if (manager && !finalIntervenants.some(i => i.matricule === manager.matricule)) {
+                              finalIntervenants.push({ matricule: manager.matricule, name: manager.name, role: manager.role });
+                            }
+
+                            if (!isOnline) {
+                              showToast("Connexion internet requise pour mettre à jour", "danger")
+                              return
+                            }
+
+                            const updatedProjet = { ...projetFormData, intervenants: finalIntervenants, dateCreation: projets[selectedProjetIndex].dateCreation }
+                            const updatedList = [...projets]
+                            updatedList[selectedProjetIndex] = updatedProjet
+
+                            try {
+                              showToast("Mise à jour sur le serveur...", "info")
+                              const res = await apiCall('POST', '/projets', updatedProjet)
+
+                              if (res.status === 200) {
+                                setProjets(updatedList)
+                                safeStorage.setItem('gp_projets_v1', JSON.stringify(updatedList))
+                                setProjetView('projet')
+                                setProjetWizardStep(1)
+                                showToast('Projet mis à jour sur le serveur')
+                              } else {
+                                showToast("Échec de la mise à jour serveur", "danger")
+                              }
+                            } catch (e) {
+                              showToast(e.message, "danger")
+                            }
+                          }}>Enregistrer les modifications</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {projetView === 'parametres' && (
+                    <div className="glass-panel animate-slide-up" style={{ maxWidth: '700px', margin: '0 auto', padding: '3rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '3rem' }}>
+                        <button className="btn-icon" onClick={() => setProjetView('projet')}>←</button>
+                        <h2>Gestion des Accès (Projet)</h2>
+                      </div>
+
+                      <div style={{ background: 'var(--card-bg-light)', padding: '2rem', borderRadius: '16px', marginBottom: '3rem' }}>
+                        <h3 style={{ marginBottom: '1.5rem' }}>Créer un nouvel accès</h3>
+                        <form onSubmit={handleAccountCreate} className="form-grid" style={{ gap: '1.5rem' }}>
+                          <div style={{ gridColumn: 'span 2' }}>
+                            <label className="input-label">Email de connexion</label>
+                            <input type="email" className="glass-input" value={newAccountFormData.email} onChange={e => setNewAccountFormData({ ...newAccountFormData, email: e.target.value })} required placeholder="nom@entreprise.com" />
+                          </div>
+                          <div>
+                            <label className="input-label">Mot de passe</label>
+                            <input type="password" className="glass-input" value={newAccountFormData.password} onChange={e => setNewAccountFormData({ ...newAccountFormData, password: e.target.value })} required placeholder="••••••••" />
+                          </div>
+                          <div>
+                            <label className="input-label">Niveau d'accès</label>
+                            <select className="glass-input" value={newAccountFormData.role} onChange={e => setNewAccountFormData({ ...newAccountFormData, role: e.target.value })}>
+                              <option value="Super Admin">Super Administrateur (Accès Total)</option>
+                              <option value="Admin">Administrateur (Lecture & Écriture)</option>
+                              <option value="Visiteur">Visiteur (Lecture seule)</option>
+                            </select>
+                          </div>
+                          <div style={{ gridColumn: 'span 2', marginTop: '1rem' }}>
+                            <button type="submit" className="btn-primary" style={{ width: '100%', justifyContent: 'center' }}>Ajouter l'utilisateur</button>
+                          </div>
+                        </form>
+                      </div>
+
+                      <h3>Comptes Existants</h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
+                        {[...PROJET_ACCOUNTS, ...accounts].map((acc, idx) => (
+                          <div key={idx} className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem' }}>
+                            <div>
+                              <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{acc.email}</div>
+                              <div style={{ fontSize: '0.85rem', color: acc.role === 'Admin' ? '#3b82f6' : 'var(--text-dim)' }}>Accès {acc.role}</div>
+                            </div>
+                            {acc.email !== currentUser.email && !PROJET_ACCOUNTS.some(pa => pa.email === acc.email) && (
+                              <button className="btn-icon" onClick={() => handleAccountDelete(acc.email)} style={{ color: 'var(--danger)' }}>🗑</button>
                             )}
                           </div>
-
-                          <div style={{ background: 'rgba(248, 250, 252, 0.8)', padding: '2mm', borderRadius: '2mm', border: '1px dashed #cbd5e1', textAlign: 'center' }}>
-                            <div style={{ fontSize: '5.5pt', color: '#64748b', fontWeight: '800', marginBottom: '1mm' }}>URGENCE / HSE CONTACT</div>
-                            <div style={{ fontSize: '7pt', fontWeight: '900', color: '#0f172a' }}>034 34 001 97 — 038 48 911 41</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                ) : selectedHub === 'hse' ? (
+                <div className="animate-fade-in">
+                  {/* Critical Alerts Section */}
+                  {employees.some(e => e.certifications.some(c => {
+                    const diff = new Date(c.dateExpiration) - new Date();
+                    return diff > 0 && diff < (30 * 24 * 60 * 60 * 1000);
+                  })) && (
+                      <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', borderLeft: '4px solid var(--warning)', background: 'rgba(245, 158, 11, 0.05)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+                          <div>
+                            <h3 style={{ fontSize: '0.9rem', color: 'var(--warning)', margin: 0 }}>Alertes Expirations Proches ( &lt; 30 jours )</h3>
+                            <p style={{ fontSize: '0.8rem', margin: '0.2rem 0 0' }}>Certains passeports nécessitent une mise à jour immédiate.</p>
                           </div>
                         </div>
+                      </div>
+                    )}
 
-                        {/* MADAGREEN Branding */}
-                        <div style={{ background: 'rgba(241, 245, 249, 0.9)', padding: '2mm', textAlign: 'center', borderTop: '1px solid #e2e8f0', position: 'relative', zIndex: 1 }}>
-                          <div style={{ fontSize: '6pt', fontWeight: '900', color: '#475569' }}>MADAGREEN POWER</div>
-                          <div style={{ fontSize: '4pt', color: '#94a3b8' }}>www.madagreen-power.com</div>
+                  {employeeView === 'list' ? (
+                    <>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+                        <StatCard label="Effectif Total" value={employees.length} color="primary" icon="👥" />
+                        <StatCard label="Taux de Conformité" value={`${Math.round(employees.reduce((acc, e) => acc + e.compliance, 0) / (employees.length || 1))}%`} color="accent" icon="📈" />
+                        <StatCard label="Alertes Critiques" value={employees.filter(e => e.compliance < 60).length} color="danger" icon="🚨" />
+                      </div>
+
+                      {/* Advanced Certification Analytics */}
+                      <div className="glass-panel" style={{ padding: '2rem', marginBottom: '3rem', position: 'relative', border: '1px solid var(--border-glass)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                          <h3 style={{ fontSize: '1.1rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <span style={{ padding: '8px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: '10px' }}>📊</span>
+                            Distribution des Habilitations
+                          </h3>
+                          <div className="badge badge-info" style={{ fontSize: '0.6rem', letterSpacing: '1px' }}>Temps Réel</div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
+                          {CERTIFICATION_LIST.map(cert => {
+                            const count = employees.filter(e => e.certifications?.some(c => c.name === cert && !isExpired(c.dateExpiration) && c.attachment)).length;
+                            const percentage = employees.length > 0 ? Math.round((count / employees.length) * 100) : 0;
+                            return (
+                              <div key={cert} className="glass-card" style={{ background: 'rgba(255,255,255,0.02)', padding: '1.25rem', border: '1px solid rgba(255,255,255,0.03)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', alignItems: 'flex-start' }}>
+                                  <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-secondary)', maxWidth: '140px', lineHeight: 1.2 }}>{cert}</span>
+                                  <span style={{ fontSize: '1.1rem', fontWeight: '900', color: count > 0 ? 'var(--accent)' : 'var(--text-muted)' }}>{count}</span>
+                                </div>
+                                <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', overflow: 'hidden', position: 'relative' }}>
+                                  <div
+                                    style={{
+                                      height: '100%',
+                                      width: `${percentage}%`,
+                                      background: percentage > 80 ? 'var(--accent)' : percentage > 40 ? 'var(--primary)' : 'var(--text-muted)',
+                                      borderRadius: '10px',
+                                      transition: 'width 1.5s ease-in-out'
+                                    }}
+                                  ></div>
+                                </div>
+                                <div style={{ textAlign: 'right', marginTop: '0.5rem', fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: '800' }}>{percentage}% COUVERTURE</div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
 
+                      <div className="glass-panel" style={{ padding: '2rem', border: '1px solid var(--border-glass)' }}>
+                        <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1.5rem' }}>
+                          <div>
+                            <h2 style={{ fontSize: '1.5rem', fontWeight: '900' }}>Répertoire du Personnel</h2>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Gestion des dossiers et conformité individuelle</p>
+                          </div>
+                          <div className="controls-group" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                            <button className="btn-secondary" onClick={exportCSV}>📥 CSV</button>
+                            <select className="glass-input" style={{ width: '160px' }} value={filterDept} onChange={e => setFilterDept(e.target.value)}>
+                              <option value="Tous">Tous Depts</option>
+                              {[...new Set(employees.map(e => e.departement))].map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                            <input type="text" className="glass-input" placeholder="Rechercher..." style={{ width: '220px' }} value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                            {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
+                              <button className="btn-primary" onClick={() => { setFormData({ firstName: '', lastName: '', matricule: '', role: '', departement: '', certifications: [], avatar: null, aptitudeMedicale: true, epis: { gants: { checked: false, date: '' }, chaussures: { checked: false, date: '' }, casques: { checked: false, date: '' }, uniforme: { checked: false, date: '' }, gillet: { checked: false, date: '' } } }); setEmployeeView('add') }}>➕ Nouveau</button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                          {employees
+                            .filter(e => (filterDept === 'Tous' || e.departement === filterDept) && (e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.matricule.toLowerCase().includes(searchTerm.toLowerCase())))
+                            .map(e => (
+                              <EmployeeRaw
+                                key={e.matricule}
+                                emp={e}
+                                onSelect={(emp) => { setSelectedEmployee(emp); setEmployeeView('badge') }}
+                                onEdit={startEdit}
+                                onDelete={handleDelete}
+                                isAdmin={currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin'}
+                              />
+                            ))}
+                        </div>
+                      </div>
+                    </>
+                  ) : employeeView === 'settings' ? (
+                    <div className="glass-panel animate-fade-in" style={{ maxWidth: '800px', margin: '0 auto', padding: '3rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '3rem' }}>
+                        <button className="btn-icon" onClick={() => setEmployeeView('list')}>🔙</button>
+                        <h2 style={{ margin: 0 }}>Contrôle des Accès</h2>
+                      </div>
+
+                      <div className="glass-card" style={{ padding: '2.5rem', marginBottom: '3rem', borderLeft: '4px solid var(--primary)' }}>
+                        <h3 style={{ marginBottom: '1.5rem', fontSize: '1.2rem' }}>Nouvel Utilisateur</h3>
+                        <form onSubmit={handleAccountCreate} className="form-grid" style={{ gap: '1.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+                          <div style={{ gridColumn: 'span 2' }}>
+                            <label className="input-label">Email de connexion</label>
+                            <input type="email" className="glass-input" value={newAccountFormData.email} onChange={e => setNewAccountFormData({ ...newAccountFormData, email: e.target.value })} required placeholder="nom@madagreen-power.com" />
+                          </div>
+                          <div>
+                            <label className="input-label">Mot de passe</label>
+                            <input type="password" className="glass-input" value={newAccountFormData.password} onChange={e => setNewAccountFormData({ ...newAccountFormData, password: e.target.value })} required placeholder="••••••••" />
+                          </div>
+                          <div>
+                            <label className="input-label">Niveau d'accès</label>
+                            <select className="glass-input" value={newAccountFormData.role} onChange={e => setNewAccountFormData({ ...newAccountFormData, role: e.target.value })}>
+                              <option value="Super Admin">Super Administrateur</option>
+                              <option value="Admin">Administrateur</option>
+                              <option value="Visiteur">Visiteur (Lecture)</option>
+                            </select>
+                          </div>
+                          <div style={{ gridColumn: 'span 2', marginTop: '1rem' }}>
+                            <button type="submit" className="btn-primary" style={{ width: '100%', height: '50px' }}>Enregistrer l'accès</button>
+                          </div>
+                        </form>
+                      </div>
+
+                      <h3 style={{ marginBottom: '1.5rem', fontSize: '1.2rem' }}>Comptes Actifs</h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        {accounts.map((acc, idx) => (
+                          <div key={idx} className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 2rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                              <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>👤</div>
+                              <div>
+                                <div style={{ fontWeight: '800', color: 'var(--text-primary)' }}>{acc.email}</div>
+                                <div className={`badge ${acc.role === 'Super Admin' ? 'badge-danger' : (acc.role === 'Admin' ? 'badge-info' : 'badge-success')}`} style={{ marginTop: '0.25rem', display: 'inline-block' }}>{acc.role}</div>
+                              </div>
+                            </div>
+                            {acc.email !== currentUser.email && (
+                              <button className="btn-icon" onClick={() => handleAccountDelete(acc.email)} style={{ color: 'var(--danger)' }} title="Supprimer l'accès">🗑</button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  ) : (employeeView === 'add' || employeeView === 'edit') ? (
+                    <div className="glass-panel animate-fade-in" style={{ maxWidth: '1000px', margin: '0 auto', padding: '3rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '3rem' }}>
+                        <button className="btn-icon" onClick={() => setEmployeeView('list')}>←</button>
+                        <h2 style={{ margin: 0 }}>{employeeView === 'add' ? "Nouveau Dossier Personnel" : "Mise à jour du Dossier"}</h2>
+                      </div>
+
+                      <form onSubmit={saveEmployee}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: '3rem' }}>
+                          {/* Sidebar: Photo & Status */}
+                          <div>
+                            <div
+                              className="glass-card"
+                              style={{ padding: '1rem', textAlign: 'center', cursor: 'pointer', border: '2px dashed var(--border-glass)' }}
+                              onClick={() => document.getElementById('file-up').click()}
+                            >
+                              <div style={{ width: '100%', aspectRatio: '1/1', borderRadius: '12px', overflow: 'hidden', background: 'var(--bg-main)', marginBottom: '1rem' }}>
+                                <img src={formData.avatar || avatarPlaceholder} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Avatar" />
+                              </div>
+                              <div className="btn-secondary" style={{ width: '100%', padding: '0.5rem', fontSize: '0.8rem' }}>Changer la photo</div>
+                              <input type="file" id="file-up" hidden onChange={handleFileChange} />
+                            </div>
+
+                            <div className="glass-card" style={{ marginTop: '1.5rem', padding: '1.5rem', borderLeft: `4px solid ${formData.aptitudeMedicale ? 'var(--accent)' : 'var(--danger)'}` }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                                <input
+                                  type="checkbox"
+                                  id="apt-med"
+                                  checked={formData.aptitudeMedicale}
+                                  onChange={e => setFormData({ ...formData, aptitudeMedicale: e.target.checked })}
+                                  style={{ width: '20px', height: '20px' }}
+                                />
+                                <label htmlFor="apt-med" style={{ fontWeight: '800', fontSize: '0.9rem' }}>Aptitude Médicale</label>
+                              </div>
+                              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                {formData.aptitudeMedicale ? 'Certificat médical valide fourni.' : 'Aptitude non confirmée.'}
+                              </p>
+                            </div>
+
+                            {/* Signature Upload */}
+                            <div className="glass-card" style={{ marginTop: '1.5rem', padding: '1.5rem', borderLeft: '4px solid var(--info)' }}>
+                              <h4 style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--info)', textTransform: 'uppercase', letterSpacing: '1px' }}>✍️ Signature</h4>
+                              {formData.signature ? (
+                                <div style={{ marginBottom: '1rem', background: '#fff', borderRadius: '8px', padding: '0.5rem', border: '1px solid var(--border-glass)' }}>
+                                  <img src={formData.signature} alt="Signature" style={{ width: '100%', maxHeight: '80px', objectFit: 'contain' }} />
+                                </div>
+                              ) : (
+                                <div style={{ height: '60px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px dashed var(--border-glass)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem' }}>
+                                  <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Aucune signature déposée</span>
+                                </div>
+                              )}
+                              <label htmlFor="sig-up" className="btn-secondary" style={{ width: '100%', display: 'block', textAlign: 'center', cursor: 'pointer', padding: '0.5rem', fontSize: '0.8rem' }}>
+                                {formData.signature ? '🔄 Remplacer la signature' : '📤 Déposer une signature'}
+                              </label>
+                              <input type="file" id="sig-up" hidden accept="image/*" onChange={handleSignatureChange} />
+                              {formData.signature && (
+                                <button type="button" style={{ marginTop: '0.5rem', width: '100%', background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '0.75rem' }} onClick={() => setFormData(prev => ({ ...prev, signature: null }))}>Supprimer la signature</button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Main Content: Info & Certs */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                            <div className="glass-card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                              <div style={{ gridColumn: 'span 2' }}><h3 style={{ fontSize: '1rem', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '1px' }}>Informations Générales</h3></div>
+                              <div><label className="input-label">Nom</label><input type="text" name="lastName" className="glass-input" value={formData.lastName} onChange={handleFormChange} required /></div>
+                              <div><label className="input-label">Prénom</label><input type="text" name="firstName" className="glass-input" value={formData.firstName} onChange={handleFormChange} required /></div>
+                              <div><label className="input-label">Département</label><input type="text" name="departement" className="glass-input" value={formData.departement} onChange={handleFormChange} required /></div>
+                              <div><label className="input-label">Fonction</label><input type="text" name="role" className="glass-input" value={formData.role} onChange={handleFormChange} required /></div>
+                              <div><label className="input-label">Matricule</label><input type="text" name="matricule" className="glass-input" value={formData.matricule} onChange={handleFormChange} placeholder="AUTO-GENÉRÉ" disabled={employeeView === 'edit'} /></div>
+                            </div>
+
+                            <div className="glass-card">
+                              <h3 style={{ fontSize: '1rem', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1.5rem' }}>Équipements (EPI)</h3>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+                                {['gants', 'chaussures', 'casques', 'uniforme', 'gillet'].map(key => (
+                                  <div key={key} style={{ padding: '1rem', background: 'var(--bg-main)', borderRadius: '12px', border: formData.epis[key].checked ? '1px solid var(--accent-glow)' : '1px solid transparent' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={formData.epis[key].checked}
+                                        onChange={e => setFormData(pr => ({ ...pr, epis: { ...pr.epis, [key]: { ...pr.epis[key], checked: e.target.checked } } }))}
+                                      />
+                                      <span style={{ fontSize: '0.8rem', fontWeight: '700' }}>{key.charAt(0).toUpperCase() + key.slice(1)}</span>
+                                    </div>
+                                    {formData.epis[key].checked && (
+                                      <input
+                                        type="date"
+                                        className="glass-input"
+                                        style={{ padding: '0.3rem', fontSize: '0.75rem' }}
+                                        value={formData.epis[key].date}
+                                        onChange={e => setFormData(pr => ({ ...pr, epis: { ...pr.epis, [key]: { ...pr.epis[key], date: e.target.value } } }))}
+                                      />
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="glass-card">
+                              <h3 style={{ fontSize: '1rem', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1.5rem' }}>Certifications HSE</h3>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                                {formData.certifications.map((c, i) => (
+                                  <div key={i} className="badge badge-info" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}>
+                                    <span>{c.name} ({c.dateExpiration})</span>
+                                    <button type="button" onClick={() => setFormData(f => ({ ...f, certifications: f.certifications.filter((_, idx) => idx !== i) }))} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '1rem', alignItems: 'end', background: 'var(--bg-main)', padding: '1.5rem', borderRadius: '12px' }}>
+                                <div><label className="input-label">Type</label><select className="glass-input" value={draftCert.name} onChange={e => setDraftCert(d => ({ ...d, name: e.target.value }))}><option value="">Sélectionner...</option>{CERTIFICATION_LIST.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                                <div><label className="input-label">Date</label><input type="date" className="glass-input" value={draftCert.dateObtention} onChange={e => setDraftCert(d => ({ ...d, dateObtention: e.target.value }))} /></div>
+                                <div><label className="input-label">Validité</label><input type="number" className="glass-input" value={draftCert.validite} onChange={e => setDraftCert(d => ({ ...d, validite: e.target.value }))} placeholder="Ans" /></div>
+                                <button type="button" className="btn-primary" onClick={addCert} style={{ height: '46px' }}>Ajouter</button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: '3rem', display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                          <button type="button" className="btn-secondary" onClick={() => setEmployeeView('list')}>Annuler</button>
+                          <button type="submit" className="btn-primary" style={{ minWidth: '200px' }}>{employeeView === 'edit' ? "Mettre à jour le dossier" : "Créer le profil"}</button>
+                        </div>
+                      </form>
+                    </div>
+                  ) : employeeView === 'badge' ? (
+                    <section className="animate-fade-in" style={{ width: '100%', maxWidth: '800px', margin: '0 auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                      <div className="glass-panel profile-main" style={{ position: 'relative', padding: '1.5rem', width: '100%' }}>
+                        <button className="btn-icon" style={{ position: 'absolute', top: '1rem', right: '1rem', zIndex: 10 }} onClick={() => setEmployeeView('list')}>✕</button>
+                        <div className="profile-header" style={{ display: 'flex', gap: '2rem', alignItems: 'center', marginBottom: '3rem', padding: '1rem' }}>
+                          <div className="profile-image-wrapper" style={{ flexShrink: 0, width: '120px', height: '140px', borderRadius: '16px', overflow: 'hidden', border: '3px solid var(--primary-glow)', boxShadow: '0 10px 20px rgba(0,0,0,0.2)' }}>
+                            <img src={selectedEmployee.avatar || avatarPlaceholder} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Avatar" />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <h1 style={{ marginBottom: '0.25rem', fontSize: '1.8rem' }}>{selectedEmployee.firstName}<br />{selectedEmployee.lastName?.toUpperCase()}</h1>
+                            <p style={{ fontSize: '1.1rem', color: 'var(--primary)', fontWeight: '600', marginBottom: '0.5rem' }}>{selectedEmployee.role}</p>
+                            <div className="id-badge" style={{ display: 'inline-block', background: 'var(--primary-glow)', padding: '4px 12px', borderRadius: '8px', fontSize: '0.8rem', fontFamily: 'monospace', fontWeight: 'bold', color: 'var(--primary)' }}>{selectedEmployee.matricule}</div>
+                          </div>
+                        </div>
+
+                        <div className="badge-stats-grid">
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '1.5rem', fontWeight: '800', color: selectedEmployee.compliance >= 90 ? 'var(--accent)' : 'var(--warning)' }}>{selectedEmployee.compliance}%</div>
+                            <div className="input-label">Score HSE</div>
+                          </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '1.5rem', fontWeight: '800' }}>{selectedEmployee.certifications.length}</div>
+                            <div className="input-label">Certifications</div>
+                          </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '1.5rem', fontWeight: '800', color: selectedEmployee.status === 'Actif' ? 'var(--accent)' : 'var(--danger)' }}>{selectedEmployee.status}</div>
+                            <div className="input-label">État</div>
+                          </div>
+                        </div>
+
+                        <div style={{ background: 'var(--card-bg-medium)', padding: '1.5rem', borderRadius: '12px', textAlign: 'center', border: selectedEmployee.aptitudeMedicale ?? true ? '2px solid var(--accent-glow)' : '2px solid var(--danger-glow)' }}>
+                          <div style={{ fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '2px', color: 'var(--text-dim)', marginBottom: '0.5rem' }}>Aptitude Médicale Officielle</div>
+                          <div style={{ fontSize: '1.8rem', fontWeight: '900', color: selectedEmployee.aptitudeMedicale ?? true ? 'var(--accent)' : 'var(--danger)' }}>
+                            {selectedEmployee.aptitudeMedicale ?? true ? '✅ APTE' : '❌ INAPTE'}
+                          </div>
+                        </div>
+
+                        <h3 style={{ marginBottom: '1.5rem', fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '2px' }}>Registre des Formations</h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                          {selectedEmployee.certifications.length > 0 ? selectedEmployee.certifications.map((c, i) => (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg-medium)', padding: '1rem', borderRadius: '12px', borderLeft: `4px solid ${isExpired(c.dateExpiration) ? 'var(--danger)' : ((new Date(c.dateExpiration) - new Date()) < (30 * 24 * 60 * 60 * 1000) ? 'var(--warning)' : 'var(--accent)')}` }}>
+                              <div>
+                                <div style={{ fontWeight: '700' }}>{c.name}</div>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Délivré le {c.dateObtention}</div>
+                              </div>
+                              <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                {c.attachment && (
+                                  <button className="btn-icon" onClick={() => viewAttachment(c.attachment)} style={{ background: 'var(--primary-glow)', color: 'var(--primary)', padding: '8px', borderRadius: '10px' }} title="Voir la pièce jointe">📎</button>
+                                )}
+                                <div>
+                                  <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                                    {(new Date(c.dateExpiration) - new Date()) < (30 * 24 * 60 * 60 * 1000) && !isExpired(c.dateExpiration) ? <span style={{ color: 'var(--warning)', fontWeight: '800' }}>BIENTÔT EXPIRED! </span> : null}
+                                    {isExpired(c.dateExpiration) ? <span style={{ color: 'var(--danger)', fontWeight: '800' }}>EXPIRED! </span> : 'Expiration'}
+                                  </div>
+                                  <div style={{ fontWeight: '700', color: isExpired(c.dateExpiration) ? 'var(--danger)' : 'var(--text-main)' }}>{c.dateExpiration}</div>
+                                </div>
+                              </div>
+                            </div>
+                          )) : <p>Aucun certificat enregistré.</p>}
+                        </div>
+
+                        <div className="form-actions" style={{ marginTop: '2.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', width: '100%' }}>
+                          <button className="btn-primary" style={{ width: '100%', maxWidth: '300px', justifyContent: 'center', padding: '1.2rem' }} onClick={printBadge}>
+                            🖨️ Imprimer le Badge PDF
+                          </button>
+                          {(currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin') && (
+                            <button className="btn-secondary" style={{ width: '100%', maxWidth: '300px', justifyContent: 'center', padding: '1.2rem' }} onClick={() => startEdit(selectedEmployee)}>
+                              📝 Modifier le dossier
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="sidebar animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                        <div className="glass-panel" style={{ padding: '2rem' }}>
+                          <h3 style={{ fontSize: '1rem', marginBottom: '1.5rem' }}>Aperçu Technique</h3>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div className="security-meter">
+                              <div className="meter-fill" style={{ width: `${selectedEmployee.compliance}%`, background: selectedEmployee.compliance >= 90 ? 'var(--accent)' : 'var(--danger)' }}></div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="glass-panel" style={{ padding: '2rem' }}>
+                          <h3 style={{ fontSize: '1rem', marginBottom: '1.5rem' }}>EPI Fournis</h3>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            {[
+                              { key: 'gants', label: 'Gants' },
+                              { key: 'chaussures', label: 'Chaussures Sécu' },
+                              { key: 'casques', label: 'Casque' },
+                              { key: 'uniforme', label: 'Uniforme Manche L.' },
+                              { key: 'gillet', label: 'Gilet Coton' }
+                            ].map(({ key, label }) => {
+                              const epiData = selectedEmployee.epis?.[key] || { checked: false, date: '' };
+                              return (
+                                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                  <span style={{ color: epiData.checked ? 'var(--text-main)' : 'var(--text-dim)', fontWeight: epiData.checked ? 'bold' : 'normal' }}>{label}</span>
+                                  {epiData.checked ? (
+                                    <span style={{ fontSize: '0.8rem', color: 'var(--accent)', background: 'var(--accent-glow)', padding: '2px 8px', borderRadius: '4px' }}>{epiData.date ? epiData.date : 'Doté'}</span>
+                                  ) : (
+                                    <span style={{ fontSize: '0.8rem', color: 'var(--danger)', opacity: 0.5 }}>NON</span>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        <div style={{ position: 'fixed', left: '-100vw', top: 0, opacity: 0, pointerEvents: 'none' }}>
+                          <div id="pdf-badge-wrapper" style={{ padding: '40px', background: 'white', display: 'flex', flexDirection: 'column', gap: '40px' }}>
+
+                            {/* Recto CR80: 54x86mm */}
+                            <div id="badge-recto" style={{ width: '54mm', height: '86mm', borderRadius: '4mm', border: '0.5px solid #e2e8f0', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#ffffff', position: 'relative', boxSizing: 'border-box', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
+
+                              {/* Professional Header */}
+                              <div style={{ background: '#1e40af', height: '18mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'white', position: 'relative', zIndex: 10 }}>
+                                <img src={logo} alt="" style={{ height: '7mm', marginBottom: '1mm', filter: 'brightness(0) invert(1)' }} />
+                                <div style={{ fontSize: '7pt', fontWeight: '800', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Passeport Sécurité</div>
+                              </div>
+
+                              {/* Photo Section */}
+                              <div style={{ display: 'flex', justifyContent: 'center', marginTop: '4mm', position: 'relative', zIndex: 10 }}>
+                                <div style={{ width: '25mm', height: '30mm', borderRadius: '2mm', overflow: 'hidden', border: '2px solid #1e40af', background: '#f8fafc' }}>
+                                  <img src={selectedEmployee.avatar || avatarPlaceholder} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                </div>
+                              </div>
+
+                              {/* Info Section */}
+                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '3mm', gap: '2mm', zIndex: 10 }}>
+                                <div style={{ textAlign: 'center' }}>
+                                  <div style={{ fontSize: '10pt', fontWeight: '900', color: '#0f172a', lineHeight: '1.1' }}>{selectedEmployee.firstName}</div>
+                                  <div style={{ fontSize: '12pt', fontWeight: '900', color: '#0f172a', textTransform: 'uppercase', lineHeight: '1.1' }}>{selectedEmployee.lastName}</div>
+                                </div>
+
+                                <div style={{ background: '#f1f5f9', width: '100%', padding: '1.5mm', borderRadius: '1mm', textAlign: 'center' }}>
+                                  <div style={{ fontSize: '6pt', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.5mm' }}>Fonction</div>
+                                  <div style={{ fontSize: '8pt', color: '#1e40af', fontWeight: '800' }}>{selectedEmployee.role}</div>
+                                </div>
+
+                                <div style={{ background: '#f1f5f9', width: '100%', padding: '1.5rem', borderRadius: '1mm', textAlign: 'center' }}>
+                                  <div style={{ fontSize: '6pt', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.5rem' }}>MATRICULE</div>
+                                  <div style={{ fontSize: '10pt', fontWeight: '900', color: '#0f172a' }}>{selectedEmployee.matricule}</div>
+                                </div>
+                              </div>
+
+                              {/* Footer Bar */}
+                              <div style={{ background: selectedEmployee.compliance >= 90 ? '#10b981' : (selectedEmployee.compliance >= 60 ? '#f59e0b' : '#ef4444'), height: '1.5mm', width: '100%' }}></div>
+                            </div>
+
+                            {/* Verso CR80: 54x86mm */}
+                            <div id="badge-verso" style={{ width: '54mm', height: '86mm', borderRadius: '4mm', border: '0.5px solid #e2e8f0', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#ffffff', position: 'relative', boxSizing: 'border-box', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
+
+                              {/* Watermark Logo */}
+                              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-45deg)', opacity: 0.05, width: '40mm', zIndex: 0, pointerEvents: 'none' }}>
+                                <img src={logo} alt="" style={{ width: '100%' }} />
+                              </div>
+
+                              <div style={{ background: '#334155', color: 'white', padding: '2mm', textAlign: 'center', fontSize: '7pt', fontWeight: '800', textTransform: 'uppercase', position: 'relative', zIndex: 1 }}>
+                                Habilitations
+                              </div>
+
+                              <div style={{ flex: 1, padding: '3mm', display: 'flex', flexDirection: 'column', gap: '1.5mm', position: 'relative', zIndex: 1 }}>
+                                {/* Medical Aptitude Section Moved to Verso */}
+                                <div style={{ background: selectedEmployee.aptitudeMedicale !== false ? '#dcfce7' : '#fee2e2', padding: '2mm', borderRadius: '1.5mm', border: '1px solid ' + (selectedEmployee.aptitudeMedicale !== false ? '#86efac' : '#fca5a5'), textAlign: 'center', marginBottom: '1mm' }}>
+                                  <div style={{ fontSize: '5.5pt', color: selectedEmployee.aptitudeMedicale !== false ? '#166534' : '#991b1b', fontWeight: '800', textTransform: 'uppercase', marginBottom: '0.5mm' }}>Aptitude Médicale</div>
+                                  <div style={{ fontSize: '9pt', fontWeight: '900', color: selectedEmployee.aptitudeMedicale !== false ? '#15803d' : '#b91c1c' }}>{selectedEmployee.aptitudeMedicale !== false ? 'CONFORME' : 'NON CONFORME'}</div>
+                                </div>
+
+                                <div style={{ fontSize: '6pt', fontWeight: '900', color: '#64748b', borderBottom: '1px solid #e2e8f0', paddingBottom: '1mm', marginBottom: '1mm' }}>HABILITATION / EXPIRATION</div>
+
+                                <div style={{ flex: 1, overflow: 'hidden' }}>
+                                  {selectedEmployee.certifications.length > 0 ? (
+                                    selectedEmployee.certifications.slice(0, 6).map((c, i) => (
+                                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.2mm 0', borderBottom: '0.5px solid #f1f5f9' }}>
+                                        <div style={{ fontSize: '6.5pt', fontWeight: '700', color: '#1e293b', width: '65%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                                        <div style={{ fontSize: '6.5pt', fontWeight: '800', color: isExpired(c.dateExpiration) ? '#ef4444' : '#1e293b' }}>{c.dateExpiration.replace(/-/g, '/')}</div>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '7pt', marginTop: '5mm', fontStyle: 'italic' }}>Aucune habilitation</div>
+                                  )}
+                                </div>
+
+                                <div style={{ background: 'rgba(248, 250, 252, 0.8)', padding: '2mm', borderRadius: '2mm', border: '1px dashed #cbd5e1', textAlign: 'center' }}>
+                                  <div style={{ fontSize: '5.5pt', color: '#64748b', fontWeight: '800', marginBottom: '1mm' }}>URGENCE / HSE CONTACT</div>
+                                  <div style={{ fontSize: '7pt', fontWeight: '900', color: '#0f172a' }}>034 34 001 97 — 038 48 911 41</div>
+                                </div>
+                              </div>
+
+                              {/* MADAGREEN Branding */}
+                              <div style={{ background: 'rgba(241, 245, 249, 0.9)', padding: '2mm', textAlign: 'center', borderTop: '1px solid #e2e8f0', position: 'relative', zIndex: 1 }}>
+                                <div style={{ fontSize: '6pt', fontWeight: '900', color: '#475569' }}>MADAGREEN POWER</div>
+                                <div style={{ fontSize: '4pt', color: '#94a3b8' }}>www.madagreen-power.com</div>
+                              </div>
+                            </div>
+
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                  ) : null}
                 </div>
-              </section>
-            ) : null}
-          </div>
         ) : null}
       </main>
 
       {/* Modern Confirmation Modal */}
-      {confirmDialog.isOpen && (
-        <div className="modal-overlay animate-fade-in">
-          <div className="glass-panel animate-slide-up" style={{ padding: '2.5rem', maxWidth: '420px', width: '100%', textAlign: 'center', borderTop: '4px solid var(--danger)' }}>
-            <div style={{ fontSize: '3.5rem', marginBottom: '1rem', textShadow: '0 0 20px var(--danger-glow)' }}>⚠️</div>
-            <h2 style={{ marginBottom: '1rem' }}>Action Irréversible</h2>
-            <p style={{ color: 'var(--text-main)', marginBottom: '2.5rem', fontSize: '1.05rem', lineHeight: '1.5' }}>
-              Souhaitez-vous vraiment supprimer définitivement {confirmDialog.type === 'employee' ? `le dossier de ` : `l'accès du compte `}
-              <strong style={{ color: 'var(--danger)' }}>{confirmDialog.type === 'employee' ? confirmDialog.item.name : confirmDialog.item.email}</strong> ?
-            </p>
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <button className="btn-secondary" style={{ flex: 1, padding: '0.8rem' }} onClick={() => setConfirmDialog({ isOpen: false, item: null, type: '' })}>
-                Annuler
-              </button>
-              <button className="btn-primary" style={{ flex: 1, padding: '0.8rem', background: 'var(--danger-glow)', borderColor: 'transparent', color: 'var(--danger)', justifyContent: 'center' }} onClick={executeDelete}>
-                Confirmer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            {confirmDialog.isOpen && (
+              <div className="modal-overlay animate-fade-in">
+                <div className="glass-panel animate-slide-up" style={{ padding: '2.5rem', maxWidth: '420px', width: '100%', textAlign: 'center', borderTop: '4px solid var(--danger)' }}>
+                  <div style={{ fontSize: '3.5rem', marginBottom: '1rem', textShadow: '0 0 20px var(--danger-glow)' }}>⚠️</div>
+                  <h2 style={{ marginBottom: '1rem' }}>Action Irréversible</h2>
+                  <p style={{ color: 'var(--text-main)', marginBottom: '2.5rem', fontSize: '1.05rem', lineHeight: '1.5' }}>
+                    Souhaitez-vous vraiment supprimer définitivement {confirmDialog.type === 'employee' ? `le dossier de ` : `l'accès du compte `}
+                    <strong style={{ color: 'var(--danger)' }}>{confirmDialog.type === 'employee' ? confirmDialog.item.name : confirmDialog.item.email}</strong> ?
+                  </p>
+                  <div style={{ display: 'flex', gap: '1rem' }}>
+                    <button className="btn-secondary" style={{ flex: 1, padding: '0.8rem' }} onClick={() => setConfirmDialog({ isOpen: false, item: null, type: '' })}>
+                      Annuler
+                    </button>
+                    <button className="btn-primary" style={{ flex: 1, padding: '0.8rem', background: 'var(--danger-glow)', borderColor: 'transparent', color: 'var(--danger)', justifyContent: 'center' }} onClick={executeDelete}>
+                      Confirmer
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
-      <div className="toast-container">
-        {toasts.map(t => (
-          <div key={t.id} className="toast" style={{ borderLeftColor: t.type === 'danger' ? 'var(--danger)' : 'var(--primary)' }}>
-            <span>{t.type === 'success' ? '✅' : '🚨'}</span>
-            <span style={{ fontWeight: '600' }}>{t.message}</span>
-          </div>
-        ))}
-      </div>
+            <div className="toast-container">
+              {toasts.map(t => (
+                <div key={t.id} className="toast" style={{ borderLeftColor: t.type === 'danger' ? 'var(--danger)' : 'var(--primary)' }}>
+                  <span>{t.type === 'success' ? '✅' : '🚨'}</span>
+                  <span style={{ fontWeight: '600' }}>{t.message}</span>
+                </div>
+              ))}
+            </div>
 
-      {/* In-App PDF Viewer Modal */}
-      {pdfViewerUrl && (
-        <div className="modal-overlay animate-fade-in" style={{ zIndex: 3000 }}>
-          <div className="glass-panel animate-slide-up" style={{ width: '95%', height: '90%', maxWidth: '1000px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', position: 'relative' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 0.5rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem' }}>📄 Visualisation du Certificat</h3>
-              <button className="btn-icon" onClick={() => setPdfViewerUrl(null)} style={{ fontSize: '1.5rem' }}>✕</button>
-            </div>
-            <div style={{ flex: 1, background: '#fff', borderRadius: '12px', overflow: 'hidden' }}>
-              <iframe
-                src={pdfViewerUrl}
-                style={{ width: '100%', height: '100%', border: 'none' }}
-                title="PDF Viewer"
-              ></iframe>
-            </div>
-            <button className="btn-primary" onClick={() => setPdfViewerUrl(null)} style={{ justifyContent: 'center' }}>Fermer</button>
+            {/* In-App PDF Viewer Modal */}
+            {pdfViewerUrl && (
+              <div className="modal-overlay animate-fade-in" style={{ zIndex: 3000 }}>
+                <div className="glass-panel animate-slide-up" style={{ width: '95%', height: '90%', maxWidth: '1000px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem', position: 'relative' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 0.5rem' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.1rem' }}>📄 Visualisation du Certificat</h3>
+                    <button className="btn-icon" onClick={() => setPdfViewerUrl(null)} style={{ fontSize: '1.5rem' }}>❌</button>
+                  </div>
+                  <div style={{ flex: 1, background: '#fff', borderRadius: '12px', overflow: 'hidden' }}>
+                    <iframe
+                      src={pdfViewerUrl}
+                      style={{ width: '100%', height: '100%', border: 'none' }}
+                      title="PDF Viewer"
+                    ></iframe>
+                  </div>
+                  <button className="btn-primary" onClick={() => setPdfViewerUrl(null)} style={{ justifyContent: 'center' }}>Fermer</button>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
-    </div>
-  );
+        );
 }
 
-export default App;
+        export default App;
